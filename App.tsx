@@ -4,23 +4,43 @@ import {
   StyleSheet,
   Text,
   View,
-  SafeAreaView,
-  FlatList,
   Alert,
   TouchableOpacity,
   TextInput,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
-import { MinimalPlayer } from './src/components/MinimalPlayer';
+import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { LoginScreen } from './src/components/LoginScreen';
+import { SplashScreen } from './src/components/SplashScreen';
+import { FeedList } from './src/components/FeedList';
+import { TrackList } from './src/components/TrackList';
 import { parseRSSFeed, RSSItem } from './src/services/rssParser';
 import { sampleFeedXML } from './src/data/feedData';
 import { AWS_CONFIG } from './src/config/aws.config';
-import { Ionicons } from '@expo/vector-icons';
+import ttsService from './src/services/pollyTtsService';
+import { colors } from './src/constants/colors';
+import { Feed } from './src/types';
 
-export default function App() {
+type Screen = 'splash' | 'feedList' | 'trackList';
+
+function AppContent() {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+
+  // Navigation state
+  const [currentScreen, setCurrentScreen] = useState<Screen>('splash');
+  const [selectedFeed, setSelectedFeed] = useState<Feed | null>(null);
+
+  // Article state
   const [articles, setArticles] = useState<RSSItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [progressMap, setProgressMap] = useState<{ [key: number]: number }>({});
+
+  // Playback state
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Credentials state
   const [showCredentialsModal, setShowCredentialsModal] = useState(false);
   const [awsCredentials, setAwsCredentials] = useState({
     accessKeyId: AWS_CONFIG.accessKeyId,
@@ -30,17 +50,29 @@ export default function App() {
   const [tempCredentials, setTempCredentials] = useState({ ...awsCredentials });
 
   useEffect(() => {
+    console.log('[App] Mounting');
     loadFeed();
-    checkCredentials();
+    // checkCredentials(); // Disabled - will use backend API in future
+
+    // Hide splash after 3 seconds and show feed list
+    const splashTimer = setTimeout(() => {
+      console.log('[App] Splash timeout - showing feed list');
+      setCurrentScreen('feedList');
+    }, 3000);
+
+    return () => {
+      clearTimeout(splashTimer);
+      ttsService.stop();
+    };
   }, []);
 
   const loadFeed = () => {
     try {
       const parsedArticles = parseRSSFeed(sampleFeedXML);
       setArticles(parsedArticles);
-      console.log(`Loaded ${parsedArticles.length} articles`);
+      console.log(`[App] Loaded ${parsedArticles.length} articles`);
     } catch (error) {
-      console.error('Error loading feed:', error);
+      console.error('[App] Error loading feed:', error);
       Alert.alert('Error', 'Failed to load articles');
     }
   };
@@ -49,7 +81,25 @@ export default function App() {
     if (!awsCredentials.accessKeyId) {
       setTimeout(() => {
         setShowCredentialsModal(true);
-      }, 500);
+      }, 3500); // Show after splash
+    } else {
+      initializePolly();
+    }
+  };
+
+  const initializePolly = async () => {
+    if (!awsCredentials.accessKeyId) return;
+
+    try {
+      await ttsService.init(
+        awsCredentials.accessKeyId,
+        awsCredentials.secretAccessKey,
+        awsCredentials.region || 'eu-west-1'
+      );
+      console.log('[App] Polly initialized successfully');
+    } catch (error) {
+      console.error('[App] Failed to initialize Polly:', error);
+      Alert.alert('Initialization Error', 'Failed to initialize Amazon Polly. Check your credentials.');
     }
   };
 
@@ -61,203 +111,177 @@ export default function App() {
 
     setAwsCredentials({ ...tempCredentials });
     setShowCredentialsModal(false);
+    initializePolly();
   };
 
+  // Navigation handlers
+  const handleFeedSelect = (feed: Feed) => {
+    console.log(`[App] Feed selected: ${feed.title}, navigating to track list`);
+    setSelectedFeed(feed);
+    setCurrentScreen('trackList');
+  };
+
+  const handleBackToFeedList = () => {
+    console.log('[App] Navigating back to feed list');
+    // Stop playback when going back
+    if (isPlaying) {
+      ttsService.stop();
+      setIsPlaying(false);
+    }
+    setSelectedIndex(null);
+    setCurrentScreen('feedList');
+  };
+
+  // Track selection and playback handlers
   const selectArticle = (index: number) => {
+    console.log(`[App] Track selected: ${index}`);
+    // If already playing this article, do nothing
+    if (selectedIndex === index && isPlaying) {
+      return;
+    }
+
+    // Stop current playback if any
+    if (isPlaying) {
+      ttsService.stop();
+      setIsPlaying(false);
+    }
+
     setSelectedIndex(index);
-    setIsPlaying(false);
+    setProgressMap({ ...progressMap, [index]: 0 });
   };
 
-  const handlePlayPause = () => {
-    setIsPlaying(!isPlaying);
-  };
+  const handlePlayPause = async () => {
+    if (selectedIndex === null) return;
 
-  const handleStop = () => {
-    setIsPlaying(false);
-  };
+    const article = articles[selectedIndex];
+    if (!article) return;
 
-  const handleNext = () => {
-    if (selectedIndex !== null && selectedIndex < articles.length - 1) {
-      setSelectedIndex(selectedIndex + 1);
+    try {
+      if (isPlaying) {
+        // Stop
+        await ttsService.stop();
+        setIsPlaying(false);
+      } else {
+        // Play
+        setIsLoading(true);
+
+        await ttsService.speak(article.plainText, {
+          voiceId: 'Lucia',
+          engine: 'neural',
+          rate: '100%',
+          onProgressUpdate: (progress) => {
+            setProgressMap((prev) => ({
+              ...prev,
+              [selectedIndex]: progress,
+            }));
+          },
+        });
+
+        setIsPlaying(true);
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('[App] Playback error:', error);
+      Alert.alert('Playback Error', 'Failed to play audio. Check your internet connection.');
+      setIsLoading(false);
       setIsPlaying(false);
     }
   };
 
-  const handlePrevious = () => {
+  const handleSkipBack = () => {
     if (selectedIndex !== null && selectedIndex > 0) {
-      setSelectedIndex(selectedIndex - 1);
-      setIsPlaying(false);
+      selectArticle(selectedIndex - 1);
+    }
+  };
+
+  const handleSkipForward = () => {
+    if (selectedIndex !== null && selectedIndex < articles.length - 1) {
+      selectArticle(selectedIndex + 1);
+    }
+  };
+
+  const getArticleDuration = (article: RSSItem): string => {
+    const seconds = ttsService.estimateDuration(article.plainText);
+    return ttsService.formatDuration(seconds);
+  };
+
+  // Render current screen
+  const renderScreen = () => {
+    // Show loading while checking authentication
+    if (authLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.foreground} />
+        </View>
+      );
+    }
+
+    // Show login screen if not authenticated
+    if (!isAuthenticated) {
+      return <LoginScreen />;
+    }
+
+    // Show app screens if authenticated
+    console.log(`[App] Rendering screen: ${currentScreen}`);
+
+    switch (currentScreen) {
+      case 'splash':
+        return <SplashScreen />;
+
+      case 'feedList':
+        return (
+          <FeedList
+            onFeedSelect={handleFeedSelect}
+            onSettingsPress={() => console.log('[App] Settings pressed - not implemented yet')}
+          />
+        );
+
+      case 'trackList':
+        return (
+          <TrackList
+            feedTitle={selectedFeed?.title || selectedFeed?.url || ''}
+            articles={articles}
+            selectedIndex={selectedIndex}
+            progressMap={progressMap}
+            isPlaying={isPlaying}
+            isLoading={isLoading}
+            onTrackSelect={selectArticle}
+            onPlayPause={handlePlayPause}
+            onSkipBack={handleSkipBack}
+            onSkipForward={handleSkipForward}
+            onBack={handleBackToFeedList}
+            onSettingsPress={() => console.log('[App] Settings pressed - not implemented yet')}
+            getArticleDuration={getArticleDuration}
+          />
+        );
+
+      default:
+        return <SplashScreen />;
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <>
       <StatusBar style="auto" />
+      {renderScreen()}
+    </>
+  );
+}
 
-      {/* Minimal Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>FeedTape</Text>
-        <TouchableOpacity onPress={() => setShowCredentialsModal(true)}>
-          <Ionicons name="settings-outline" size={22} color="#666" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Article List */}
-      <FlatList
-        data={articles}
-        keyExtractor={(item, index) => index.toString()}
-        renderItem={({ item, index }) => (
-          <TouchableOpacity
-            style={[
-              styles.articleItem,
-              selectedIndex === index && styles.selectedArticle
-            ]}
-            onPress={() => selectArticle(index)}
-          >
-            <Text
-              style={[
-                styles.articleTitle,
-                selectedIndex === index && styles.selectedTitle
-              ]}
-              numberOfLines={2}
-            >
-              {item.title}
-            </Text>
-          </TouchableOpacity>
-        )}
-        contentContainerStyle={styles.listContent}
-      />
-
-      {/* Minimal Player Controls */}
-      <MinimalPlayer
-        text={selectedIndex !== null ? articles[selectedIndex].plainText : ''}
-        isPlaying={isPlaying}
-        onPlayPause={handlePlayPause}
-        onStop={handleStop}
-        onNext={handleNext}
-        onPrevious={handlePrevious}
-        awsCredentials={awsCredentials.accessKeyId ? awsCredentials : undefined}
-      />
-
-      {/* Credentials Modal */}
-      <Modal
-        visible={showCredentialsModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowCredentialsModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>AWS Credentials</Text>
-            <Text style={styles.modalDescription}>
-              To use Amazon Polly, you need AWS credentials.{'\n'}
-              Sign up for AWS Free Tier to get 1M neural TTS characters/month free.
-            </Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Access Key ID"
-              value={tempCredentials.accessKeyId}
-              onChangeText={(text) => setTempCredentials({ ...tempCredentials, accessKeyId: text })}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Secret Access Key"
-              value={tempCredentials.secretAccessKey}
-              onChangeText={(text) => setTempCredentials({ ...tempCredentials, secretAccessKey: text })}
-              secureTextEntry={true}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Region (e.g., eu-west-1 for EU)"
-              value={tempCredentials.region}
-              onChangeText={(text) => setTempCredentials({ ...tempCredentials, region: text })}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            <Text style={styles.regionHint}>
-              For neural voices use: eu-west-1 (Ireland) or eu-central-1 (Frankfurt).
-              {'\n'}eu-north-1 (Stockholm) only supports standard voices.
-            </Text>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setShowCredentialsModal(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalButton, styles.saveButton]}
-                onPress={handleSaveCredentials}
-              >
-                <Text style={styles.saveButtonText}>Save</Text>
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-              style={styles.helpLink}
-              onPress={() => Alert.alert(
-                'How to Get AWS Credentials',
-                '1. Sign up for AWS Free Tier\n2. Go to IAM Console\n3. Create new user with programmatic access\n4. Attach "AmazonPollyReadOnlyAccess" policy\n5. Copy Access Key ID and Secret'
-              )}
-            >
-              <Text style={styles.helpLinkText}>How to get AWS credentials?</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  loadingContainer: {
     flex: 1,
-    backgroundColor: '#fff',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    backgroundColor: colors.background,
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1a1a1a',
-  },
-  listContent: {
-    paddingBottom: 10,
-  },
-  articleItem: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f5f5f5',
-  },
-  selectedArticle: {
-    backgroundColor: '#FFF3E0',
-  },
-  articleTitle: {
-    fontSize: 16,
-    lineHeight: 22,
-    color: '#333',
-  },
-  selectedTitle: {
-    color: '#FF9900',
-    fontWeight: '500',
   },
   modalOverlay: {
     flex: 1,
@@ -266,7 +290,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.background,
     borderRadius: 20,
     padding: 24,
     width: '90%',
@@ -276,21 +300,23 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 8,
-    color: '#333',
+    color: colors.foreground,
   },
   modalDescription: {
     fontSize: 14,
-    color: '#666',
+    color: colors.mutedForeground,
     marginBottom: 20,
     lineHeight: 20,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors.border,
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,
     fontSize: 16,
+    color: colors.foreground,
+    backgroundColor: colors.background,
   },
   modalButtons: {
     flexDirection: 'row',
@@ -305,19 +331,19 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     marginRight: 8,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.muted,
   },
   saveButton: {
     marginLeft: 8,
-    backgroundColor: '#FF9900',
+    backgroundColor: colors.buttonBg,
   },
   cancelButtonText: {
-    color: '#666',
+    color: colors.mutedForeground,
     fontSize: 16,
     fontWeight: '600',
   },
   saveButtonText: {
-    color: '#fff',
+    color: colors.buttonText,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -332,7 +358,7 @@ const styles = StyleSheet.create({
   },
   regionHint: {
     fontSize: 12,
-    color: '#666',
+    color: colors.mutedForeground,
     marginTop: -8,
     marginBottom: 12,
     lineHeight: 18,

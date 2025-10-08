@@ -17,6 +17,7 @@ export interface TTSOptions {
   voiceId?: string;
   engine?: 'standard' | 'neural' | 'generative';
   outputFormat?: 'mp3' | 'ogg_vorbis' | 'pcm';
+  onProgressUpdate?: (progress: number) => void; // Progress callback (0-100)
 }
 
 // Spanish voices available in Polly
@@ -44,6 +45,8 @@ class PollyTTSService {
   private isInitialized = false;
   private isSpeaking = false;
   private isPaused = false;
+  private progressCallback: ((progress: number) => void) | null = null;
+  private progressInterval: NodeJS.Timeout | null = null;
 
   /**
    * Initialize AWS Polly service
@@ -213,6 +216,12 @@ class PollyTTSService {
       this.currentSound = sound;
       this.isSpeaking = true;
       this.isPaused = false;
+      this.progressCallback = options?.onProgressUpdate || null;
+
+      // Start progress tracking if callback provided
+      if (this.progressCallback) {
+        this.startProgressTracking();
+      }
 
       console.log('Polly: Audio playback started');
 
@@ -220,6 +229,58 @@ class PollyTTSService {
       console.error('Polly speak error:', error);
       this.isSpeaking = false;
       throw error;
+    }
+  }
+
+  /**
+   * Start tracking playback progress
+   */
+  private async startProgressTracking() {
+    if (!this.currentSound || !this.progressCallback) return;
+
+    // Clear any existing interval
+    if (this.progressInterval) {
+      clearInterval(this.progressInterval);
+    }
+
+    // Update progress every 100ms
+    this.progressInterval = setInterval(async () => {
+      if (!this.currentSound || !this.progressCallback) {
+        this.stopProgressTracking();
+        return;
+      }
+
+      try {
+        const status = await this.currentSound.getStatusAsync();
+        if (status.isLoaded) {
+          const progress = status.durationMillis && status.durationMillis > 0
+            ? (status.positionMillis / status.durationMillis) * 100
+            : 0;
+
+          this.progressCallback(Math.min(progress, 100));
+
+          if (status.didJustFinish) {
+            this.stopProgressTracking();
+          }
+        }
+      } catch (error) {
+        console.error('Error tracking progress:', error);
+        this.stopProgressTracking();
+      }
+    }, 100);
+  }
+
+  /**
+   * Stop progress tracking
+   */
+  private stopProgressTracking() {
+    if (this.progressInterval) {
+      clearInterval(this.progressInterval);
+      this.progressInterval = null;
+    }
+    if (this.progressCallback) {
+      this.progressCallback(0);
+      this.progressCallback = null;
     }
   }
 
@@ -232,12 +293,14 @@ class PollyTTSService {
         console.log('Polly: Playback finished');
         this.isSpeaking = false;
         this.isPaused = false;
+        this.stopProgressTracking();
         this.cleanupSound();
       }
     } else if (status.error) {
       console.error('Playback error:', status.error);
       this.isSpeaking = false;
       this.isPaused = false;
+      this.stopProgressTracking();
     }
   }
 
@@ -275,6 +338,7 @@ class PollyTTSService {
    * Stop current speech
    */
   async stop(): Promise<void> {
+    this.stopProgressTracking();
     if (this.currentSound) {
       try {
         await this.currentSound.stopAsync();
@@ -311,6 +375,24 @@ class PollyTTSService {
       isSpeaking: this.isSpeaking,
       isPaused: this.isPaused
     };
+  }
+
+  /**
+   * Estimate duration in seconds based on text length
+   * Average speech rate: ~15 characters per second for natural TTS
+   */
+  estimateDuration(text: string): number {
+    const CHARS_PER_SECOND = 15;
+    return Math.ceil(text.length / CHARS_PER_SECOND);
+  }
+
+  /**
+   * Format duration as MM:SS
+   */
+  formatDuration(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
   /**

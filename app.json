@@ -3,6 +3,7 @@
     "name": "feedtape-app-polly",
     "slug": "feedtape-app-polly",
     "version": "1.0.0",
+    "scheme": "feedtape",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

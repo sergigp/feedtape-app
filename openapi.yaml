@@ -1,0 +1,686 @@
+openapi: 3.0.3
+info:
+  title: FeedTape API
+  description: |
+    Minimal backend API for FeedTape RSS to Audio service.
+
+    The app handles RSS fetching and article management locally.
+    The backend provides authentication, feed URL storage, and TTS proxy.
+
+    ## Authentication
+    Uses OAuth2 with JWT tokens. Supports Apple, Google, and GitHub as identity providers.
+  version: 3.0.0
+  contact:
+    name: FeedTape Support
+    email: support@feedtape.app
+
+servers:
+  - url: https://delightful-freedom-production.up.railway.app
+    description: Production
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Authentication
+    description: OAuth2 authentication and token management
+  - name: User
+    description: User settings and subscription status
+  - name: Feeds
+    description: RSS feed URL management
+  - name: TTS
+    description: Text-to-speech synthesis
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from OAuth flow
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: "Daily character limit exceeded"
+
+    MeResponse:
+      type: object
+      required:
+        - id
+        - settings
+        - subscription
+      properties:
+        id:
+          type: string
+          format: uuid
+        settings:
+          type: object
+          properties:
+            voice:
+              type: string
+              description: Voice ID
+              example: "voice_lucia_es"
+            language:
+              type: string
+              enum: [es, en, fr, de, pt, it]
+              default: en
+        subscription:
+          type: object
+          properties:
+            tier:
+              type: string
+              enum: [free, pro]
+              example: free
+            status:
+              type: string
+              enum: [active, expired, cancelled]
+              example: active
+            usage:
+              type: object
+              properties:
+                minutes_used_today:
+                  type: number
+                  example: 18.5
+                minutes_limit:
+                  type: integer
+                  example: 20
+                characters_used_today:
+                  type: integer
+                  example: 27000
+                characters_limit:
+                  type: integer
+                  example: 30000
+                resets_at:
+                  type: string
+                  format: date-time
+            limits:
+              type: object
+              properties:
+                max_feeds:
+                  type: integer
+                  example: 3
+
+    Feed:
+      type: object
+      required:
+        - id
+        - url
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+          example: "https://blog.example.com/rss"
+        title:
+          type: string
+          example: "Tech Blog"
+          description: Optional friendly name for the feed
+        created_at:
+          type: string
+          format: date-time
+
+    TtsRequest:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 10000
+          description: Article content to convert to speech
+        language:
+          type: string
+          enum: [auto, es, en, fr, de, pt, it]
+          default: auto
+          description: Language for TTS or auto-detect
+        voice:
+          type: string
+          description: Voice ID (overrides user default)
+          example: "Lucia"
+        speed:
+          type: number
+          minimum: 0.5
+          maximum: 2.0
+          description: Playback speed (overrides user default)
+        quality:
+          type: string
+          enum: [standard, neural]
+          description: Voice quality (overrides user default)
+
+    TokenResponse:
+      type: object
+      required:
+        - token
+        - refresh_token
+      properties:
+        token:
+          type: string
+          description: JWT access token
+        refresh_token:
+          type: string
+          description: Refresh token
+        expires_in:
+          type: integer
+          description: Token expiry in seconds
+          example: 3600
+
+paths:
+  # Authentication endpoints
+  /auth/oauth/github:
+    get:
+      summary: Initiate GitHub OAuth flow
+      tags: [Authentication]
+      description: Redirects to GitHub for user authorization. After authorization, GitHub will redirect back to /auth/callback/github.
+      responses:
+        '302':
+          description: Redirect to GitHub OAuth authorization page
+          headers:
+            Location:
+              description: GitHub authorization URL
+              schema:
+                type: string
+                example: https://github.com/login/oauth/authorize?client_id=...
+
+  /auth/callback/github:
+    get:
+      summary: GitHub OAuth callback
+      tags: [Authentication]
+      description: Handles the OAuth callback from GitHub, exchanges the code for tokens, and creates/logs in the user.
+      parameters:
+        - name: code
+          in: query
+          required: true
+          description: Authorization code from GitHub
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          description: State parameter for CSRF protection
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Authentication successful, user logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+              example:
+                token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                refresh_token: 550e8400-e29b-41d4-a716-446655440000
+                expires_in: 3600
+        '400':
+          description: Invalid request or missing email from GitHub
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: OAuth authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/refresh:
+    post:
+      summary: Refresh access token
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/logout:
+    post:
+      summary: Logout and invalidate single refresh token
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '204':
+          description: Logout successful
+        '401':
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/logout/all:
+    post:
+      summary: Logout from all devices (invalidate all refresh tokens)
+      tags: [Authentication]
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: All sessions logged out
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # User endpoint
+  /api/me:
+    get:
+      summary: Get current user info, settings, and subscription
+      tags: [User]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+              example:
+                id: "123e4567-e89b-12d3-a456-426614174000"
+                settings:
+                  voice: "voice_lucia_es"
+                  language: "en"
+                subscription:
+                  tier: "free"
+                  status: "active"
+                  usage:
+                    minutes_used_today: 18.5
+                    minutes_limit: 20
+                    characters_used_today: 27000
+                    characters_limit: 30000
+                    resets_at: "2024-01-02T00:00:00Z"
+                  limits:
+                    max_feeds: 3
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    patch:
+      summary: Update user settings
+      tags: [User]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                settings:
+                  type: object
+                  properties:
+                    voice:
+                      type: string
+                      description: Voice ID
+                      example: "voice_sergio_es"
+                    language:
+                      type: string
+                      enum: [es, en, fr, de, pt, it]
+            example:
+              settings:
+                voice: "voice_sergio_es"
+                language: "es"
+      responses:
+        '204':
+          description: Settings updated
+
+
+  # Feed endpoints
+  /api/feeds:
+    get:
+      summary: List user's feed URLs
+      tags: [Feeds]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of feeds
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Feed'
+              example:
+                - id: "feed-123"
+                  url: "https://xataka.com/rss"
+                  title: "Xataka"
+                  created_at: "2024-01-01T10:00:00Z"
+                - id: "feed-456"
+                  url: "https://blog.example.com/feed"
+                  title: null
+                  created_at: "2024-01-02T15:30:00Z"
+
+    post:
+      summary: Add new feed URL
+      tags: [Feeds]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+                - url
+                - title
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                  description: Client-generated UUID for the feed
+                  example: "feed-789"
+                url:
+                  type: string
+                  format: uri
+                  example: "https://blog.example.com/rss"
+                title:
+                  type: string
+                  description: Friendly name for the feed
+                  example: "My Tech Blog"
+      responses:
+        '201':
+          description: Feed added
+        '400':
+          description: Invalid URL format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '402':
+          description: Free tier feed limit reached
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: "Free tier allows maximum 3 feeds. Upgrade to Pro for unlimited feeds."
+        '409':
+          description: Feed URL already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/feeds/{feedId}:
+    put:
+      summary: Update feed title
+      tags: [Feeds]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: feedId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  description: Friendly name for the feed
+      responses:
+        '204':
+          description: Feed updated
+        '404':
+          description: Feed not found
+
+    delete:
+      summary: Delete feed
+      tags: [Feeds]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: feedId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Feed deleted
+        '404':
+          description: Feed not found
+
+  # TTS endpoints
+  /api/tts/synthesize:
+    post:
+      summary: Convert text to speech
+      tags: [TTS]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TtsRequest'
+            examples:
+              simple:
+                summary: Basic request
+                value:
+                  text: "Este es el contenido del artículo"
+              with_preferences:
+                summary: With voice preferences
+                value:
+                  text: "Article content here"
+                  language: "en"
+                  voice: "Lucia"
+                  speed: 1.25
+                  quality: "neural"
+      responses:
+        '200':
+          description: Audio generated
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                example: audio/mpeg
+            Content-Length:
+              schema:
+                type: integer
+            Cache-Control:
+              schema:
+                type: string
+                example: "private, max-age=3600"
+            X-Duration-Seconds:
+              schema:
+                type: integer
+            X-Character-Count:
+              schema:
+                type: integer
+            X-Language-Detected:
+              schema:
+                type: string
+            X-Usage-Remaining:
+              schema:
+                type: integer
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+            audio/ogg:
+              schema:
+                type: string
+                format: binary
+        '402':
+          description: Upgrade required for requested features
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: "Neural voices require Pro subscription"
+        '413':
+          description: Text too long
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: TTS service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/tts/usage:
+    get:
+      summary: Get TTS usage statistics
+      tags: [TTS]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Usage statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  period:
+                    type: string
+                    example: "daily"
+                  usage:
+                    type: object
+                    properties:
+                      characters:
+                        type: integer
+                      minutes:
+                        type: number
+                      requests:
+                        type: integer
+                  limits:
+                    type: object
+                    properties:
+                      characters:
+                        type: integer
+                      minutes:
+                        type: integer
+                      requests:
+                        type: integer
+                  resets_at:
+                    type: string
+                    format: date-time
+                  history:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          format: date
+                        characters:
+                          type: integer
+                        minutes:
+                          type: number
+
+  # Health check
+  /health:
+    get:
+      summary: Health check
+      tags: [System]
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "OK"
+
+  /health/ready:
+    get:
+      summary: Readiness check
+      tags: [System]
+      responses:
+        '200':
+          description: Service ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ready"
+                  database:
+                    type: string
+                    example: "connected"
+                  tts:
+                    type: string
+                    example: "available"
