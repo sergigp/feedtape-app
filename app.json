@@ -14,7 +14,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": ["audio"]
+      },
+      "bundleIdentifier": "com.anonymous.feedtape-app-polly"
     },
     "android": {
       "adaptiveIcon": {

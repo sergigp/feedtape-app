@@ -28,22 +28,35 @@ export const FeedList: React.FC<FeedListProps> = ({
   const [activeFeed, setActiveFeed] = useState<Feed | null>(null);
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     loadFeeds();
   }, []);
 
-  const loadFeeds = async () => {
+  const loadFeeds = async (isRefresh = false) => {
     try {
-      setIsLoading(true);
+      if (isRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
       const fetchedFeeds = await feedService.getFeeds();
       setFeeds(fetchedFeeds);
     } catch (error) {
       console.error('[FeedList] Failed to load feeds:', error);
       Alert.alert('Error', 'Failed to load feeds. Please try again.');
     } finally {
-      setIsLoading(false);
+      if (isRefresh) {
+        setIsRefreshing(false);
+      } else {
+        setIsLoading(false);
+      }
     }
+  };
+
+  const handleRefresh = () => {
+    loadFeeds(true);
   };
 
   const handleFeedPress = (feed: Feed) => {
@@ -57,11 +70,31 @@ export const FeedList: React.FC<FeedListProps> = ({
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerInner}>
+          {/* Refresh Button - Top Left */}
+          <TouchableOpacity
+            onPress={handleRefresh}
+            style={styles.refreshButton}
+            disabled={isRefreshing}
+          >
+            {isRefreshing ? (
+              <ActivityIndicator size="small" color={colors.foregroundMedium} />
+            ) : (
+              <Ionicons
+                name="refresh"
+                size={20}
+                color={colors.foregroundMedium}
+              />
+            )}
+          </TouchableOpacity>
+
+          {/* Logo - Centered */}
           <Image
             source={require('../../assets/feedtape-logo.png')}
             style={styles.logo}
             resizeMode="contain"
           />
+
+          {/* Settings Button - Top Right */}
           <TouchableOpacity
             onPress={onSettingsPress}
             style={styles.settingsButton}
@@ -131,6 +164,13 @@ const styles = StyleSheet.create({
   logo: {
     height: 64, // h-16 = 64px
     width: 200,
+  },
+  refreshButton: {
+    position: 'absolute',
+    left: 32,
+    top: '50%',
+    transform: [{ translateY: -10 }],
+    padding: 8,
   },
   settingsButton: {
     position: 'absolute',

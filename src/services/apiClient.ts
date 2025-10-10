@@ -1,6 +1,7 @@
 import { ApiError } from '../types';
+import { API_BASE_URL } from '../config/env';
 
-export const API_BASE_URL = 'https://delightful-freedom-production.up.railway.app';
+export { API_BASE_URL };
 
 export class ApiClient {
   private static accessToken: string | null = null;

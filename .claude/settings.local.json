@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(npx tsc:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "mcp__github__create_issue",
+      "WebSearch",
+      "mcp__github__get_me",
+      "mcp__github__add_issue_comment",
+      "Bash(xcrun simctl list:*)",
+      "Bash(pod install:*)"
     ],
     "deny": [],
     "ask": []

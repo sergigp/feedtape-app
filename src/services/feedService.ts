@@ -50,6 +50,29 @@ class FeedService {
       throw error;
     }
   }
+
+  // Fetch RSS feed content from URL
+  async fetchRSSContent(feedUrl: string): Promise<string> {
+    try {
+      console.log('[FeedService] Fetching RSS content from:', feedUrl);
+      const response = await fetch(feedUrl, {
+        headers: {
+          'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch RSS feed: ${response.status} ${response.statusText}`);
+      }
+
+      const xmlContent = await response.text();
+      console.log('[FeedService] RSS content fetched successfully');
+      return xmlContent;
+    } catch (error) {
+      console.error('[FeedService] Failed to fetch RSS content:', error);
+      throw error;
+    }
+  }
 }
 
 export default new FeedService();

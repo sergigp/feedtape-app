@@ -2,12 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   StyleSheet,
-  Text,
   View,
   Alert,
-  TouchableOpacity,
-  TextInput,
-  Modal,
   ActivityIndicator,
 } from 'react-native';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
@@ -17,8 +13,8 @@ import { FeedList } from './src/components/FeedList';
 import { TrackList } from './src/components/TrackList';
 import { parseRSSFeed, RSSItem } from './src/services/rssParser';
 import { sampleFeedXML } from './src/data/feedData';
-import { AWS_CONFIG } from './src/config/aws.config';
-import ttsService from './src/services/pollyTtsService';
+import trackPlayerService from './src/services/trackPlayerService';
+import feedService from './src/services/feedService';
 import { colors } from './src/constants/colors';
 import { Feed } from './src/types';
 
@@ -40,19 +36,9 @@ function AppContent() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Credentials state
-  const [showCredentialsModal, setShowCredentialsModal] = useState(false);
-  const [awsCredentials, setAwsCredentials] = useState({
-    accessKeyId: AWS_CONFIG.accessKeyId,
-    secretAccessKey: AWS_CONFIG.secretAccessKey,
-    region: AWS_CONFIG.region || 'eu-west-1',
-  });
-  const [tempCredentials, setTempCredentials] = useState({ ...awsCredentials });
-
   useEffect(() => {
     console.log('[App] Mounting');
     loadFeed();
-    // checkCredentials(); // Disabled - will use backend API in future
 
     // Hide splash after 3 seconds and show feed list
     const splashTimer = setTimeout(() => {
@@ -62,7 +48,7 @@ function AppContent() {
 
     return () => {
       clearTimeout(splashTimer);
-      ttsService.stop();
+      trackPlayerService.stop();
     };
   }, []);
 
@@ -77,55 +63,41 @@ function AppContent() {
     }
   };
 
-  const checkCredentials = () => {
-    if (!awsCredentials.accessKeyId) {
-      setTimeout(() => {
-        setShowCredentialsModal(true);
-      }, 3500); // Show after splash
-    } else {
-      initializePolly();
-    }
-  };
-
-  const initializePolly = async () => {
-    if (!awsCredentials.accessKeyId) return;
+  // Navigation handlers
+  const handleFeedSelect = async (feed: Feed) => {
+    console.log(`[App] Feed selected: ${feed.title}, fetching RSS content`);
+    setSelectedFeed(feed);
+    setIsLoading(true);
 
     try {
-      await ttsService.init(
-        awsCredentials.accessKeyId,
-        awsCredentials.secretAccessKey,
-        awsCredentials.region || 'eu-west-1'
-      );
-      console.log('[App] Polly initialized successfully');
+      // Fetch RSS content from the feed URL
+      const xmlContent = await feedService.fetchRSSContent(feed.url);
+
+      // Parse the RSS feed
+      const parsedArticles = parseRSSFeed(xmlContent);
+      console.log(`[App] Parsed ${parsedArticles.length} articles from ${feed.title}`);
+
+      // Update articles state
+      setArticles(parsedArticles);
+
+      // Navigate to track list
+      setCurrentScreen('trackList');
     } catch (error) {
-      console.error('[App] Failed to initialize Polly:', error);
-      Alert.alert('Initialization Error', 'Failed to initialize Amazon Polly. Check your credentials.');
+      console.error('[App] Failed to fetch/parse RSS feed:', error);
+      Alert.alert(
+        'Error Loading Feed',
+        'Failed to load articles from this feed. Please check the feed URL and try again.'
+      );
+    } finally {
+      setIsLoading(false);
     }
-  };
-
-  const handleSaveCredentials = () => {
-    if (!tempCredentials.accessKeyId || !tempCredentials.secretAccessKey) {
-      Alert.alert('Missing Credentials', 'Please enter AWS credentials');
-      return;
-    }
-
-    setAwsCredentials({ ...tempCredentials });
-    setShowCredentialsModal(false);
-    initializePolly();
-  };
-
-  // Navigation handlers
-  const handleFeedSelect = (feed: Feed) => {
-    console.log(`[App] Feed selected: ${feed.title}, navigating to track list`);
-    setSelectedFeed(feed);
-    setCurrentScreen('trackList');
   };
 
   const handleBackToFeedList = () => {
     console.log('[App] Navigating back to feed list');
     // Stop playback when going back
     if (isPlaying) {
-      ttsService.stop();
+      trackPlayerService.stop();
       setIsPlaying(false);
     }
     setSelectedIndex(null);
@@ -142,7 +114,7 @@ function AppContent() {
 
     // Stop current playback if any
     if (isPlaying) {
-      ttsService.stop();
+      trackPlayerService.stop();
       setIsPlaying(false);
     }
 
@@ -159,16 +131,14 @@ function AppContent() {
     try {
       if (isPlaying) {
         // Stop
-        await ttsService.stop();
+        await trackPlayerService.stop();
         setIsPlaying(false);
       } else {
         // Play
         setIsLoading(true);
 
-        await ttsService.speak(article.plainText, {
-          voiceId: 'Lucia',
-          engine: 'neural',
-          rate: '100%',
+        await trackPlayerService.speak(article.plainText, article.link, {
+          language: 'auto',
           onProgressUpdate: (progress) => {
             setProgressMap((prev) => ({
               ...prev,
@@ -201,8 +171,8 @@ function AppContent() {
   };
 
   const getArticleDuration = (article: RSSItem): string => {
-    const seconds = ttsService.estimateDuration(article.plainText);
-    return ttsService.formatDuration(seconds);
+    const seconds = trackPlayerService.estimateDuration(article.plainText);
+    return trackPlayerService.formatDuration(seconds);
   };
 
   // Render current screen
@@ -282,85 +252,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: colors.background,
-    borderRadius: 20,
-    padding: 24,
-    width: '90%',
-    maxWidth: 400,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    color: colors.foreground,
-  },
-  modalDescription: {
-    fontSize: 14,
-    color: colors.mutedForeground,
-    marginBottom: 20,
-    lineHeight: 20,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    fontSize: 16,
-    color: colors.foreground,
-    backgroundColor: colors.background,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 20,
-  },
-  modalButton: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  cancelButton: {
-    marginRight: 8,
-    backgroundColor: colors.muted,
-  },
-  saveButton: {
-    marginLeft: 8,
-    backgroundColor: colors.buttonBg,
-  },
-  cancelButtonText: {
-    color: colors.mutedForeground,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  saveButtonText: {
-    color: colors.buttonText,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  helpLink: {
-    marginTop: 20,
-    alignItems: 'center',
-  },
-  helpLinkText: {
-    color: '#007AFF',
-    fontSize: 14,
-    textDecorationLine: 'underline',
-  },
-  regionHint: {
-    fontSize: 12,
-    color: colors.mutedForeground,
-    marginTop: -8,
-    marginBottom: 12,
-    lineHeight: 18,
   },
 });

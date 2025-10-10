@@ -1,17 +1,14 @@
 import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
 import { TokenResponse, User } from '../types';
-import { ApiClient, API_BASE_URL } from './apiClient';
+import { ApiClient } from './apiClient';
+import { API_BASE_URL } from '../config/env';
 
 const TOKEN_KEY = 'feedtape_access_token';
 const REFRESH_TOKEN_KEY = 'feedtape_refresh_token';
 
 // Required for OAuth flow to work properly
 WebBrowser.maybeCompleteAuthSession();
-
-// Create a promise that resolves when deep link is received
-let deepLinkResolver: ((url: string) => void) | null = null;
 
 class AuthService {
   // Store tokens securely
@@ -53,71 +50,61 @@ class AuthService {
 
   // Initiate GitHub OAuth flow
   async loginWithGitHub(): Promise<TokenResponse> {
-    let linkingSubscription: any = null;
-
     try {
-      const authUrl = `${API_BASE_URL}/auth/oauth/github`;
+      const authUrl = `${API_BASE_URL}/auth/oauth/github?mobile=true`;
 
       console.log('[AuthService] Opening GitHub OAuth flow');
+      console.log('[AuthService] OAuth URL:', authUrl);
 
-      // Create a promise that resolves when we receive the deep link
-      const deepLinkPromise = new Promise<string>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('OAuth timeout - no response received'));
-        }, 300000); // 5 minute timeout
+      // Open the OAuth URL using auth session (designed for OAuth flows)
+      console.log('[AuthService] Opening auth session...');
+      let authResult;
+      try {
+        authResult = await WebBrowser.openAuthSessionAsync(
+          authUrl,
+          'feedtape://auth/callback'
+        );
+        console.log('[AuthService] Auth session result:', authResult);
 
-        deepLinkResolver = (url: string) => {
-          clearTimeout(timeout);
-          resolve(url);
-        };
-      });
-
-      // Listen for deep links
-      linkingSubscription = Linking.addEventListener('url', (event) => {
-        console.log('[AuthService] Deep link received:', event.url);
-        if (deepLinkResolver) {
-          deepLinkResolver(event.url);
-          deepLinkResolver = null;
+        // Check the result type
+        if (authResult.type === 'cancel') {
+          throw new Error('User cancelled authentication');
         }
-      });
 
-      // Open the OAuth URL
-      await WebBrowser.openBrowserAsync(authUrl);
+        if (authResult.type === 'dismiss') {
+          throw new Error('Authentication dismissed');
+        }
 
-      // Wait for the deep link callback
-      const callbackUrl = await deepLinkPromise;
+        if (authResult.type !== 'success') {
+          throw new Error(`Unexpected auth result type: ${authResult.type}`);
+        }
 
-      // Parse tokens from the callback URL
-      const url = new URL(callbackUrl);
-      const token = url.searchParams.get('token');
-      const refreshToken = url.searchParams.get('refresh_token');
-      const expiresIn = url.searchParams.get('expires_in');
+        // Parse tokens from the result URL
+        const resultUrl = new URL(authResult.url);
+        const token = resultUrl.searchParams.get('token');
+        const refreshToken = resultUrl.searchParams.get('refresh_token');
+        const expiresIn = resultUrl.searchParams.get('expires_in');
 
-      if (!token || !refreshToken) {
-        throw new Error('No tokens received from OAuth callback');
+        if (!token || !refreshToken) {
+          throw new Error('No tokens received from OAuth callback');
+        }
+
+        const tokenResponse: TokenResponse = {
+          token,
+          refresh_token: refreshToken,
+          expires_in: expiresIn ? parseInt(expiresIn, 10) : 3600,
+        };
+
+        await this.storeTokens(token, refreshToken);
+        return tokenResponse;
+
+      } catch (authError: any) {
+        console.error('[AuthService] Auth session error:', authError);
+        throw new Error(`Failed to authenticate: ${authError.message}`);
       }
-
-      const tokenResponse: TokenResponse = {
-        token,
-        refresh_token: refreshToken,
-        expires_in: expiresIn ? parseInt(expiresIn, 10) : 3600,
-      };
-
-      await this.storeTokens(token, refreshToken);
-
-      // Dismiss the browser
-      await WebBrowser.dismissBrowser();
-
-      return tokenResponse;
     } catch (error) {
       console.error('[AuthService] GitHub login failed:', error);
       throw error;
-    } finally {
-      // Clean up the listener
-      if (linkingSubscription) {
-        linkingSubscription.remove();
-      }
-      deepLinkResolver = null;
     }
   }
 

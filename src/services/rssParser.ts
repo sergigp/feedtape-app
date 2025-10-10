@@ -40,7 +40,7 @@ export function stripHtml(html: string): string {
 }
 
 /**
- * Parses RSS XML string and extracts article content
+ * Parses RSS/Atom XML string and extracts article content
  */
 export function parseRSSItem(xmlString: string): RSSItem | null {
   try {
@@ -51,24 +51,66 @@ export function parseRSSItem(xmlString: string): RSSItem | null {
     };
 
     // Extract title
-    const titleMatch = xmlString.match(/<title>(.*?)<\/title>/s);
+    const titleMatch = xmlString.match(/<title[^>]*>(.*?)<\/title>/s);
     const title = titleMatch ? extractCDATA(titleMatch[1]).trim() : '';
 
-    // Extract link
+    // Extract link (RSS: <link>url</link>, Atom: <link rel="alternate" href="url" />)
+    let link = '';
     const linkMatch = xmlString.match(/<link>(.*?)<\/link>/s);
-    const link = linkMatch ? linkMatch[1].trim() : '';
+    if (linkMatch) {
+      link = linkMatch[1].trim();
+    } else {
+      const atomLinkMatch = xmlString.match(/<link[^>]*rel="alternate"[^>]*href="([^"]*)"/);
+      if (atomLinkMatch) {
+        link = atomLinkMatch[1];
+      }
+    }
 
-    // Extract publication date
+    // Extract publication date (RSS: <pubDate>, Atom: <published> or <updated>)
+    let pubDate = '';
     const pubDateMatch = xmlString.match(/<pubDate>(.*?)<\/pubDate>/s);
-    const pubDate = pubDateMatch ? pubDateMatch[1].trim() : '';
+    if (pubDateMatch) {
+      pubDate = pubDateMatch[1].trim();
+    } else {
+      const publishedMatch = xmlString.match(/<published>(.*?)<\/published>/s);
+      if (publishedMatch) {
+        pubDate = publishedMatch[1].trim();
+      } else {
+        const updatedMatch = xmlString.match(/<updated>(.*?)<\/updated>/s);
+        if (updatedMatch) {
+          pubDate = updatedMatch[1].trim();
+        }
+      }
+    }
 
-    // Extract author
+    // Extract author (RSS: <dc:creator>, Atom: <author><name>)
+    let author = '';
     const authorMatch = xmlString.match(/<dc:creator>(.*?)<\/dc:creator>/s);
-    const author = authorMatch ? authorMatch[1].trim() : '';
+    if (authorMatch) {
+      author = authorMatch[1].trim();
+    } else {
+      const atomAuthorMatch = xmlString.match(/<author>[\s\S]*?<name>(.*?)<\/name>/s);
+      if (atomAuthorMatch) {
+        author = atomAuthorMatch[1].trim();
+      }
+    }
 
-    // Extract description/content
+    // Extract description/content (RSS: <description>, Atom: <content> or <summary>)
+    let content = '';
     const descriptionMatch = xmlString.match(/<description>(.*?)<\/description>/s);
-    const content = descriptionMatch ? extractCDATA(descriptionMatch[1]).trim() : '';
+    if (descriptionMatch) {
+      content = extractCDATA(descriptionMatch[1]).trim();
+    } else {
+      const contentMatch = xmlString.match(/<content[^>]*>(.*?)<\/content>/s);
+      if (contentMatch) {
+        content = extractCDATA(contentMatch[1]).trim();
+      } else {
+        const summaryMatch = xmlString.match(/<summary[^>]*>(.*?)<\/summary>/s);
+        if (summaryMatch) {
+          content = extractCDATA(summaryMatch[1]).trim();
+        }
+      }
+    }
 
     // Create plain text version for TTS
     const plainText = stripHtml(content);
@@ -88,12 +130,12 @@ export function parseRSSItem(xmlString: string): RSSItem | null {
 }
 
 /**
- * Parse multiple RSS items from feed XML
+ * Parse multiple RSS items from feed XML (supports both RSS <item> and Atom <entry>)
  */
 export function parseRSSFeed(xmlString: string): RSSItem[] {
   const items: RSSItem[] = [];
 
-  // Match all <item> tags
+  // Try RSS format first (<item> tags)
   const itemRegex = /<item>([\s\S]*?)<\/item>/g;
   let match;
 
@@ -101,6 +143,17 @@ export function parseRSSFeed(xmlString: string): RSSItem[] {
     const item = parseRSSItem(`<item>${match[1]}</item>`);
     if (item) {
       items.push(item);
+    }
+  }
+
+  // If no items found, try Atom format (<entry> tags)
+  if (items.length === 0) {
+    const entryRegex = /<entry>([\s\S]*?)<\/entry>/g;
+    while ((match = entryRegex.exec(xmlString)) !== null) {
+      const item = parseRSSItem(`<entry>${match[1]}</entry>`);
+      if (item) {
+        items.push(item);
+      }
     }
   }
 
