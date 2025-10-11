@@ -9,6 +9,7 @@ import TrackPlayer, {
 } from 'react-native-track-player';
 import { API_BASE_URL } from '../config/env';
 import * as SecureStore from 'expo-secure-store';
+import RNFS from 'react-native-fs';
 
 export interface TTSOptions {
   language?: 'auto' | 'es' | 'en' | 'fr' | 'de' | 'pt' | 'it';
@@ -23,6 +24,7 @@ class TrackPlayerService {
   private progressCallback: ((progress: number) => void) | null = null;
   private progressInterval: NodeJS.Timeout | null = null;
   private currentTrackId: string | null = null;
+  private currentFileUri: string | null = null;
 
   /**
    * Make an authenticated request to the backend
@@ -58,8 +60,17 @@ class TrackPlayerService {
     try {
       console.log('[TrackPlayer] Initializing...');
 
-      // Setup track player
-      await TrackPlayer.setupPlayer();
+      // Setup track player (wrapped in try-catch to handle already initialized case)
+      try {
+        await TrackPlayer.setupPlayer();
+      } catch (setupError: any) {
+        // If already initialized, that's fine - just continue
+        if (setupError?.message?.includes('already been initialized')) {
+          console.log('[TrackPlayer] Already initialized, skipping setup');
+        } else {
+          throw setupError;
+        }
+      }
 
       // Configure capabilities (controls available in lock screen/control center)
       await TrackPlayer.updateOptions({
@@ -117,6 +128,24 @@ class TrackPlayerService {
   }
 
   /**
+   * Delete old cached audio file
+   */
+  private async deleteOldAudioFile() {
+    if (this.currentFileUri) {
+      try {
+        const exists = await RNFS.exists(this.currentFileUri);
+        if (exists) {
+          await RNFS.unlink(this.currentFileUri);
+          console.log('[TrackPlayer] Deleted old audio file:', this.currentFileUri);
+        }
+      } catch (error) {
+        console.warn('[TrackPlayer] Failed to delete old audio file:', error);
+      }
+      this.currentFileUri = null;
+    }
+  }
+
+  /**
    * Convert text to speech and play it
    */
   async speak(text: string, link: string, options?: TTSOptions): Promise<void> {
@@ -125,7 +154,7 @@ class TrackPlayerService {
     }
 
     try {
-      // Stop any current playback
+      // Stop any current playback and delete old file
       await this.stop();
 
       console.log('[TrackPlayer] Speaking text with length:', text.length);
@@ -168,6 +197,7 @@ class TrackPlayerService {
 
       // Get audio blob from response
       const audioBlob = await response.blob();
+      console.log('[TrackPlayer] Audio blob size:', audioBlob.size);
 
       // Convert blob to base64
       const reader = new FileReader();
@@ -179,8 +209,20 @@ class TrackPlayerService {
         reader.onerror = reject;
       });
       reader.readAsDataURL(audioBlob);
-
       const base64Audio = await base64Promise;
+
+      // Save to local file system using react-native-fs
+      // Extract the base64 data without the data URL prefix
+      const base64Data = base64Audio.split(',')[1];
+
+      // Use RNFS cache directory (always available)
+      const fileUri = `${RNFS.CachesDirectoryPath}/tts-${Date.now()}.mp3`;
+
+      console.log('[TrackPlayer] Saving audio to:', fileUri);
+      await RNFS.writeFile(fileUri, base64Data, 'base64');
+
+      // Store the current file URI for cleanup later
+      this.currentFileUri = fileUri;
 
       // Generate unique track ID
       this.currentTrackId = `track-${Date.now()}`;
@@ -188,10 +230,12 @@ class TrackPlayerService {
       // Extract title from text (first 50 chars or first sentence)
       const title = text.split(/[.!?]/)[0].substring(0, 50) + '...';
 
-      // Add track to queue
+      console.log('[TrackPlayer] Adding track with file URI:', fileUri);
+
+      // Add track to queue with local file URI
       await TrackPlayer.add({
         id: this.currentTrackId,
-        url: base64Audio,
+        url: fileUri,
         title: title,
         artist: 'FeedTape',
         description: link,
@@ -300,6 +344,9 @@ class TrackPlayerService {
       this.isSpeaking = false;
       this.currentTrackId = null;
       console.log('[TrackPlayer] Playback stopped');
+
+      // Delete the old audio file after stopping
+      await this.deleteOldAudioFile();
     } catch (error) {
       console.error('[TrackPlayer] Failed to stop:', error);
     }
@@ -342,6 +389,29 @@ class TrackPlayerService {
     await this.stop();
     await TrackPlayer.destroy();
     this.isInitialized = false;
+  }
+
+  /**
+   * Clear all cached audio files (useful for freeing up space)
+   */
+  async clearCache(): Promise<void> {
+    try {
+      const cacheDir = RNFS.CachesDirectoryPath;
+      const files = await RNFS.readDir(cacheDir);
+      const audioFiles = files.filter(file =>
+        file.name.startsWith('tts-') && file.name.endsWith('.mp3')
+      );
+
+      console.log(`[TrackPlayer] Clearing ${audioFiles.length} cached audio files`);
+
+      for (const file of audioFiles) {
+        await RNFS.unlink(file.path);
+      }
+
+      console.log('[TrackPlayer] Cache cleared successfully');
+    } catch (error) {
+      console.error('[TrackPlayer] Failed to clear cache:', error);
+    }
   }
 }
 
