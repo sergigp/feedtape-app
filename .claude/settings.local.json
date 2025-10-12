@@ -9,7 +9,9 @@
       "mcp__github__add_issue_comment",
       "Bash(xcrun simctl list:*)",
       "Bash(pod install:*)",
-      "Bash(npx expo prebuild:*)"
+      "Bash(npx expo prebuild:*)",
+      "Bash(npm test:*)",
+      "Bash(npm test)"
     ],
     "deny": [],
     "ask": []

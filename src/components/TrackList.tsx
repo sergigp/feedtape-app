@@ -54,6 +54,7 @@ export const TrackList: React.FC<TrackListProps> = ({
           <TouchableOpacity
             onPress={onBack}
             style={styles.backButton}
+            testID="back-button"
           >
             <Ionicons
               name="chevron-back"
