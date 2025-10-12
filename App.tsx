@@ -40,17 +40,32 @@ function AppContent() {
     console.log('[App] Mounting');
     loadFeed();
 
-    // Hide splash after 3 seconds and show feed list
-    const splashTimer = setTimeout(() => {
-      console.log('[App] Splash timeout - showing feed list');
-      setCurrentScreen('feedList');
-    }, 3000);
-
     return () => {
-      clearTimeout(splashTimer);
       trackPlayerService.stop();
     };
   }, []);
+
+  // Handle splash screen transition when authenticated
+  useEffect(() => {
+    if (isAuthenticated && !authLoading) {
+      const transitionToFeed = () => {
+        console.log('[App] Splash timeout - showing feed list');
+        setCurrentScreen((prevScreen) => {
+          // Only transition from splash to feedList, don't interfere with other screens
+          return prevScreen === 'splash' ? 'feedList' : prevScreen;
+        });
+      };
+
+      // In test mode, transition immediately without setTimeout
+      if (process.env.NODE_ENV === 'test') {
+        transitionToFeed();
+      } else {
+        // In production, show splash for 3 seconds
+        const splashTimer = setTimeout(transitionToFeed, 3000);
+        return () => clearTimeout(splashTimer);
+      }
+    }
+  }, [isAuthenticated, authLoading]);
 
   const loadFeed = () => {
     try {

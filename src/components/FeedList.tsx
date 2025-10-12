@@ -75,6 +75,7 @@ export const FeedList: React.FC<FeedListProps> = ({
             onPress={handleRefresh}
             style={styles.refreshButton}
             disabled={isRefreshing}
+            testID="refresh-button"
           >
             {isRefreshing ? (
               <ActivityIndicator size="small" color={colors.foregroundMedium} />
