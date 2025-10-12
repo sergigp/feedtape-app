@@ -47,13 +47,17 @@ describe('Auth Flow Integration Tests', () => {
       const loginButton = screen.getByText(/continue with github/i);
       fireEvent.press(loginButton);
 
+      // Add a small delay to allow state updates to propagate
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       // Verify login was successful by waiting for feed list
       await waitFor(
         () => {
           // Should show feed list (either loading or feed items)
           const loadingText = screen.queryByText(/loading feeds/i);
           const noFeedsText = screen.queryByText(/no feeds yet/i);
-          expect(loadingText || noFeedsText).toBeTruthy();
+          const feedItem = screen.queryByText(/test feed 1/i);
+          expect(loadingText || noFeedsText || feedItem).toBeTruthy();
         },
         { timeout: 5000 }
       );
@@ -124,12 +128,16 @@ describe('Auth Flow Integration Tests', () => {
         expect(screen.queryByText(/continue with github/i)).toBeNull();
       });
 
+      // Add a small delay to allow state updates to propagate
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       // Should show feed list after splash
       await waitFor(
         () => {
           const loadingText = screen.queryByText(/loading feeds/i);
           const noFeedsText = screen.queryByText(/no feeds yet/i);
-          expect(loadingText || noFeedsText).toBeTruthy();
+          const feedItem = screen.queryByText(/test feed 1/i);
+          expect(loadingText || noFeedsText || feedItem).toBeTruthy();
         },
         { timeout: 5000 }
       );
@@ -202,12 +210,16 @@ describe('Auth Flow Integration Tests', () => {
 
       render(<App />);
 
+      // Wait for auth initialization and token refresh to complete
+      await new Promise(resolve => setTimeout(resolve, 200));
+
       // Should successfully authenticate after token refresh
       await waitFor(
         () => {
           const loadingText = screen.queryByText(/loading feeds/i);
           const noFeedsText = screen.queryByText(/no feeds yet/i);
-          expect(loadingText || noFeedsText).toBeTruthy();
+          const feedItem = screen.queryByText(/test feed 1/i);
+          expect(loadingText || noFeedsText || feedItem).toBeTruthy();
         },
         { timeout: 5000 }
       );
