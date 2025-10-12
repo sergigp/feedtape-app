@@ -4,18 +4,26 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "start:dev": "EXPO_PUBLIC_API_URL=http://YOUR_LOCAL_IP:8080 expo start",
+    "android": "expo run:android",
+    "android:dev": "EXPO_PUBLIC_API_URL=http://localhost:8080 expo start --android",
+    "ios": "expo run:ios",
+    "ios:dev": "EXPO_PUBLIC_API_URL=http://localhost:8080 expo start --ios",
     "web": "expo start --web"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
-    "aws-sdk": "^2.1692.0",
     "expo": "~54.0.12",
+    "expo-auth-session": "^7.0.8",
     "expo-av": "^16.0.7",
+    "expo-file-system": "~19.0.17",
+    "expo-secure-store": "^15.0.7",
     "expo-status-bar": "~3.0.8",
+    "expo-web-browser": "^15.0.8",
     "react": "19.1.0",
-    "react-native": "0.81.4"
+    "react-native": "0.81.4",
+    "react-native-fs": "^2.20.0",
+    "react-native-track-player": "^4.1.2"
   },
   "devDependencies": {
     "@expo/cli": "^54.0.10",

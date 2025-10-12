@@ -3,6 +3,7 @@
     "name": "feedtape-app-polly",
     "slug": "feedtape-app-polly",
     "version": "1.0.0",
+    "scheme": "feedtape",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -13,7 +14,13 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ]
+      },
+      "bundleIdentifier": "com.anonymous.feedtape-app-polly"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +28,8 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.feedtapeapppolly"
     },
     "web": {
       "favicon": "./assets/favicon.png"

@@ -2,339 +2,255 @@ import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   StyleSheet,
-  Text,
   View,
-  SafeAreaView,
-  FlatList,
   Alert,
-  TouchableOpacity,
-  TextInput,
-  Modal,
+  ActivityIndicator,
 } from 'react-native';
-import { MinimalPlayer } from './src/components/MinimalPlayer';
+import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { LoginScreen } from './src/components/LoginScreen';
+import { SplashScreen } from './src/components/SplashScreen';
+import { FeedList } from './src/components/FeedList';
+import { TrackList } from './src/components/TrackList';
 import { parseRSSFeed, RSSItem } from './src/services/rssParser';
 import { sampleFeedXML } from './src/data/feedData';
-import { AWS_CONFIG } from './src/config/aws.config';
-import { Ionicons } from '@expo/vector-icons';
+import trackPlayerService from './src/services/trackPlayerService';
+import feedService from './src/services/feedService';
+import { colors } from './src/constants/colors';
+import { Feed } from './src/types';
 
-export default function App() {
+type Screen = 'splash' | 'feedList' | 'trackList';
+
+function AppContent() {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+
+  // Navigation state
+  const [currentScreen, setCurrentScreen] = useState<Screen>('splash');
+  const [selectedFeed, setSelectedFeed] = useState<Feed | null>(null);
+
+  // Article state
   const [articles, setArticles] = useState<RSSItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [progressMap, setProgressMap] = useState<{ [key: number]: number }>({});
+
+  // Playback state
   const [isPlaying, setIsPlaying] = useState(false);
-  const [showCredentialsModal, setShowCredentialsModal] = useState(false);
-  const [awsCredentials, setAwsCredentials] = useState({
-    accessKeyId: AWS_CONFIG.accessKeyId,
-    secretAccessKey: AWS_CONFIG.secretAccessKey,
-    region: AWS_CONFIG.region || 'eu-west-1',
-  });
-  const [tempCredentials, setTempCredentials] = useState({ ...awsCredentials });
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
+    console.log('[App] Mounting');
     loadFeed();
-    checkCredentials();
+
+    // Hide splash after 3 seconds and show feed list
+    const splashTimer = setTimeout(() => {
+      console.log('[App] Splash timeout - showing feed list');
+      setCurrentScreen('feedList');
+    }, 3000);
+
+    return () => {
+      clearTimeout(splashTimer);
+      trackPlayerService.stop();
+    };
   }, []);
 
   const loadFeed = () => {
     try {
       const parsedArticles = parseRSSFeed(sampleFeedXML);
       setArticles(parsedArticles);
-      console.log(`Loaded ${parsedArticles.length} articles`);
+      console.log(`[App] Loaded ${parsedArticles.length} articles`);
     } catch (error) {
-      console.error('Error loading feed:', error);
+      console.error('[App] Error loading feed:', error);
       Alert.alert('Error', 'Failed to load articles');
     }
   };
 
-  const checkCredentials = () => {
-    if (!awsCredentials.accessKeyId) {
-      setTimeout(() => {
-        setShowCredentialsModal(true);
-      }, 500);
+  // Navigation handlers
+  const handleFeedSelect = async (feed: Feed) => {
+    console.log(`[App] Feed selected: ${feed.title}, fetching RSS content`);
+    setSelectedFeed(feed);
+    setIsLoading(true);
+
+    try {
+      // Fetch RSS content from the feed URL
+      const xmlContent = await feedService.fetchRSSContent(feed.url);
+
+      // Parse the RSS feed
+      const parsedArticles = parseRSSFeed(xmlContent);
+      console.log(`[App] Parsed ${parsedArticles.length} articles from ${feed.title}`);
+
+      // Update articles state
+      setArticles(parsedArticles);
+
+      // Navigate to track list
+      setCurrentScreen('trackList');
+    } catch (error) {
+      console.error('[App] Failed to fetch/parse RSS feed:', error);
+      Alert.alert(
+        'Error Loading Feed',
+        'Failed to load articles from this feed. Please check the feed URL and try again.'
+      );
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleSaveCredentials = () => {
-    if (!tempCredentials.accessKeyId || !tempCredentials.secretAccessKey) {
-      Alert.alert('Missing Credentials', 'Please enter AWS credentials');
+  const handleBackToFeedList = () => {
+    console.log('[App] Navigating back to feed list');
+    // Stop playback when going back
+    if (isPlaying) {
+      trackPlayerService.stop();
+      setIsPlaying(false);
+    }
+    setSelectedIndex(null);
+    setCurrentScreen('feedList');
+  };
+
+  // Track selection and playback handlers
+  const selectArticle = (index: number) => {
+    console.log(`[App] Track selected: ${index}`);
+    // If already playing this article, do nothing
+    if (selectedIndex === index && isPlaying) {
       return;
     }
 
-    setAwsCredentials({ ...tempCredentials });
-    setShowCredentialsModal(false);
-  };
+    // Stop current playback if any
+    if (isPlaying) {
+      trackPlayerService.stop();
+      setIsPlaying(false);
+    }
 
-  const selectArticle = (index: number) => {
     setSelectedIndex(index);
-    setIsPlaying(false);
+    setProgressMap({ ...progressMap, [index]: 0 });
   };
 
-  const handlePlayPause = () => {
-    setIsPlaying(!isPlaying);
-  };
+  const handlePlayPause = async () => {
+    if (selectedIndex === null) return;
 
-  const handleStop = () => {
-    setIsPlaying(false);
-  };
+    const article = articles[selectedIndex];
+    if (!article) return;
 
-  const handleNext = () => {
-    if (selectedIndex !== null && selectedIndex < articles.length - 1) {
-      setSelectedIndex(selectedIndex + 1);
+    try {
+      if (isPlaying) {
+        // Stop
+        await trackPlayerService.stop();
+        setIsPlaying(false);
+      } else {
+        // Play
+        setIsLoading(true);
+
+        await trackPlayerService.speak(article.plainText, article.link, {
+          language: 'auto',
+          onProgressUpdate: (progress) => {
+            setProgressMap((prev) => ({
+              ...prev,
+              [selectedIndex]: progress,
+            }));
+          },
+        });
+
+        setIsPlaying(true);
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('[App] Playback error:', error);
+      Alert.alert('Playback Error', 'Failed to play audio. Check your internet connection.');
+      setIsLoading(false);
       setIsPlaying(false);
     }
   };
 
-  const handlePrevious = () => {
+  const handleSkipBack = () => {
     if (selectedIndex !== null && selectedIndex > 0) {
-      setSelectedIndex(selectedIndex - 1);
-      setIsPlaying(false);
+      selectArticle(selectedIndex - 1);
+    }
+  };
+
+  const handleSkipForward = () => {
+    if (selectedIndex !== null && selectedIndex < articles.length - 1) {
+      selectArticle(selectedIndex + 1);
+    }
+  };
+
+  const getArticleDuration = (article: RSSItem): string => {
+    const seconds = trackPlayerService.estimateDuration(article.plainText);
+    return trackPlayerService.formatDuration(seconds);
+  };
+
+  // Render current screen
+  const renderScreen = () => {
+    // Show loading while checking authentication
+    if (authLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.foreground} />
+        </View>
+      );
+    }
+
+    // Show login screen if not authenticated
+    if (!isAuthenticated) {
+      return <LoginScreen />;
+    }
+
+    // Show app screens if authenticated
+    console.log(`[App] Rendering screen: ${currentScreen}`);
+
+    switch (currentScreen) {
+      case 'splash':
+        return <SplashScreen />;
+
+      case 'feedList':
+        return (
+          <FeedList
+            onFeedSelect={handleFeedSelect}
+            onSettingsPress={() => console.log('[App] Settings pressed - not implemented yet')}
+          />
+        );
+
+      case 'trackList':
+        return (
+          <TrackList
+            feedTitle={selectedFeed?.title || selectedFeed?.url || ''}
+            articles={articles}
+            selectedIndex={selectedIndex}
+            progressMap={progressMap}
+            isPlaying={isPlaying}
+            isLoading={isLoading}
+            onTrackSelect={selectArticle}
+            onPlayPause={handlePlayPause}
+            onSkipBack={handleSkipBack}
+            onSkipForward={handleSkipForward}
+            onBack={handleBackToFeedList}
+            onSettingsPress={() => console.log('[App] Settings pressed - not implemented yet')}
+            getArticleDuration={getArticleDuration}
+          />
+        );
+
+      default:
+        return <SplashScreen />;
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <>
       <StatusBar style="auto" />
+      {renderScreen()}
+    </>
+  );
+}
 
-      {/* Minimal Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>FeedTape</Text>
-        <TouchableOpacity onPress={() => setShowCredentialsModal(true)}>
-          <Ionicons name="settings-outline" size={22} color="#666" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Article List */}
-      <FlatList
-        data={articles}
-        keyExtractor={(item, index) => index.toString()}
-        renderItem={({ item, index }) => (
-          <TouchableOpacity
-            style={[
-              styles.articleItem,
-              selectedIndex === index && styles.selectedArticle
-            ]}
-            onPress={() => selectArticle(index)}
-          >
-            <Text
-              style={[
-                styles.articleTitle,
-                selectedIndex === index && styles.selectedTitle
-              ]}
-              numberOfLines={2}
-            >
-              {item.title}
-            </Text>
-          </TouchableOpacity>
-        )}
-        contentContainerStyle={styles.listContent}
-      />
-
-      {/* Minimal Player Controls */}
-      <MinimalPlayer
-        text={selectedIndex !== null ? articles[selectedIndex].plainText : ''}
-        isPlaying={isPlaying}
-        onPlayPause={handlePlayPause}
-        onStop={handleStop}
-        onNext={handleNext}
-        onPrevious={handlePrevious}
-        awsCredentials={awsCredentials.accessKeyId ? awsCredentials : undefined}
-      />
-
-      {/* Credentials Modal */}
-      <Modal
-        visible={showCredentialsModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowCredentialsModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>AWS Credentials</Text>
-            <Text style={styles.modalDescription}>
-              To use Amazon Polly, you need AWS credentials.{'\n'}
-              Sign up for AWS Free Tier to get 1M neural TTS characters/month free.
-            </Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Access Key ID"
-              value={tempCredentials.accessKeyId}
-              onChangeText={(text) => setTempCredentials({ ...tempCredentials, accessKeyId: text })}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Secret Access Key"
-              value={tempCredentials.secretAccessKey}
-              onChangeText={(text) => setTempCredentials({ ...tempCredentials, secretAccessKey: text })}
-              secureTextEntry={true}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Region (e.g., eu-west-1 for EU)"
-              value={tempCredentials.region}
-              onChangeText={(text) => setTempCredentials({ ...tempCredentials, region: text })}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            <Text style={styles.regionHint}>
-              For neural voices use: eu-west-1 (Ireland) or eu-central-1 (Frankfurt).
-              {'\n'}eu-north-1 (Stockholm) only supports standard voices.
-            </Text>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setShowCredentialsModal(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalButton, styles.saveButton]}
-                onPress={handleSaveCredentials}
-              >
-                <Text style={styles.saveButtonText}>Save</Text>
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-              style={styles.helpLink}
-              onPress={() => Alert.alert(
-                'How to Get AWS Credentials',
-                '1. Sign up for AWS Free Tier\n2. Go to IAM Console\n3. Create new user with programmatic access\n4. Attach "AmazonPollyReadOnlyAccess" policy\n5. Copy Access Key ID and Secret'
-              )}
-            >
-              <Text style={styles.helpLinkText}>How to get AWS credentials?</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  loadingContainer: {
     flex: 1,
-    backgroundColor: '#fff',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1a1a1a',
-  },
-  listContent: {
-    paddingBottom: 10,
-  },
-  articleItem: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f5f5f5',
-  },
-  selectedArticle: {
-    backgroundColor: '#FFF3E0',
-  },
-  articleTitle: {
-    fontSize: 16,
-    lineHeight: 22,
-    color: '#333',
-  },
-  selectedTitle: {
-    color: '#FF9900',
-    fontWeight: '500',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 24,
-    width: '90%',
-    maxWidth: 400,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    color: '#333',
-  },
-  modalDescription: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 20,
-    lineHeight: 20,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    fontSize: 16,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 20,
-  },
-  modalButton: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  cancelButton: {
-    marginRight: 8,
-    backgroundColor: '#f5f5f5',
-  },
-  saveButton: {
-    marginLeft: 8,
-    backgroundColor: '#FF9900',
-  },
-  cancelButtonText: {
-    color: '#666',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  helpLink: {
-    marginTop: 20,
-    alignItems: 'center',
-  },
-  helpLinkText: {
-    color: '#007AFF',
-    fontSize: 14,
-    textDecorationLine: 'underline',
-  },
-  regionHint: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: -8,
-    marginBottom: 12,
-    lineHeight: 18,
   },
 });
