@@ -13,7 +13,7 @@ import { FeedList } from './src/components/FeedList';
 import { TrackList } from './src/components/TrackList';
 import { parseRSSFeed, RSSItem } from './src/services/rssParser';
 import { sampleFeedXML } from './src/data/feedData';
-import trackPlayerService from './src/services/trackPlayerService';
+import nativeTtsService from './src/services/nativeTtsService';
 import feedService from './src/services/feedService';
 import { colors } from './src/constants/colors';
 import { Feed } from './src/types';
@@ -41,7 +41,7 @@ function AppContent() {
     loadFeed();
 
     return () => {
-      trackPlayerService.stop();
+      nativeTtsService.stop();
     };
   }, []);
 
@@ -112,7 +112,7 @@ function AppContent() {
     console.log('[App] Navigating back to feed list');
     // Stop playback when going back
     if (isPlaying) {
-      trackPlayerService.stop();
+      nativeTtsService.stop();
       setIsPlaying(false);
     }
     setSelectedIndex(null);
@@ -129,7 +129,7 @@ function AppContent() {
 
     // Stop current playback if any
     if (isPlaying) {
-      trackPlayerService.stop();
+      nativeTtsService.stop();
       setIsPlaying(false);
     }
 
@@ -144,31 +144,31 @@ function AppContent() {
     if (!article) return;
 
     try {
-      if (isPlaying) {
+      const speaking = await nativeTtsService.isSpeaking();
+
+      if (isPlaying || speaking) {
         // Stop
-        await trackPlayerService.stop();
+        await nativeTtsService.stop();
         setIsPlaying(false);
       } else {
-        // Play
-        setIsLoading(true);
+        // Play using native TTS
+        setIsPlaying(true);
 
-        await trackPlayerService.speak(article.plainText, article.link, {
-          language: 'auto',
-          onProgressUpdate: (progress) => {
-            setProgressMap((prev) => ({
-              ...prev,
-              [selectedIndex]: progress,
-            }));
+        // Speak the article (non-blocking, returns when done)
+        nativeTtsService.speak(article.plainText, {
+          language: 'en-US', // TODO: Add language detection/selection
+          onDone: () => {
+            setIsPlaying(false);
+          },
+          onError: (error) => {
+            console.error('[App] TTS error:', error);
+            setIsPlaying(false);
           },
         });
-
-        setIsPlaying(true);
-        setIsLoading(false);
       }
     } catch (error) {
       console.error('[App] Playback error:', error);
-      Alert.alert('Playback Error', 'Failed to play audio. Check your internet connection.');
-      setIsLoading(false);
+      Alert.alert('Playback Error', 'Failed to play audio.');
       setIsPlaying(false);
     }
   };
@@ -186,8 +186,8 @@ function AppContent() {
   };
 
   const getArticleDuration = (article: RSSItem): string => {
-    const seconds = trackPlayerService.estimateDuration(article.plainText);
-    return trackPlayerService.formatDuration(seconds);
+    const seconds = nativeTtsService.estimateDuration(article.plainText);
+    return nativeTtsService.formatDuration(seconds);
   };
 
   // Render current screen

@@ -7,7 +7,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>
-    <string>feedtape-app-polly</string>
+    <string>FeedTape</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -28,7 +28,7 @@
         <key>CFBundleURLSchemes</key>
         <array>
           <string>feedtape</string>
-          <string>com.anonymous.feedtape-app-polly</string>
+          <string>com.feedtape.app</string>
         </array>
       </dict>
     </array>

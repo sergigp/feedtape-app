@@ -1,214 +1,143 @@
-# FeedTape - Amazon Polly Edition
+# FeedTape
 
-A React Native/Expo app that converts RSS feeds to high-quality audio using Amazon Polly's neural voices.
+React Native/Expo app for listening to RSS feeds using native text-to-speech.
 
-## Features
+## Prerequisites
 
-- **Amazon Polly Neural Voices**: Professional-quality text-to-speech
-- **Multiple Spanish Voices**: 8+ voices across ES-ES, ES-MX, and ES-US
-- **Low Latency**: Sub-second response times
-- **Voice Selection**: Switch between male/female and regional accents
-- **Speed Control**: Adjustable playback speed (0.75x to 1.5x)
-- **Secure Credentials**: In-app AWS credential management
+### Required Software
 
-## Key Differences from Native Version
+1. **Node.js 18+**
+   ```bash
+   node --version  # Should be v18.x or higher
+   ```
 
-| Feature | Native (AVSpeechSynthesizer) | Polly Edition |
-|---------|------------------------------|---------------|
-| Voice Quality | Robotic/Basic | Natural/Neural |
-| Latency | Instant | <500ms |
-| Voices | System voices | 8+ Spanish voices |
-| Cost | Free | $16/1M chars |
-| Offline | Yes | No |
-| Pause/Resume | Limited | Full support |
+2. **Xcode** (for iOS Simulator)
+   - Install from Mac App Store
+   - Open Xcode at least once to accept the license
+   - Install iOS Simulator: Xcode → Settings → Platforms → iOS
 
-## Setup Instructions
+3. **Xcode Command Line Tools**
+   ```bash
+   xcode-select --install
+   ```
 
-### 1. Get AWS Credentials
+4. **Watchman** (recommended for file watching)
+   ```bash
+   brew install watchman
+   ```
 
-1. **Sign up for AWS Free Tier**
-   - Go to: https://aws.amazon.com/free/
-   - You get 1M neural TTS characters/month free for 12 months
+## Setup
 
-2. **Create IAM User**
-   - Go to IAM Console: https://console.aws.amazon.com/iam/
-   - Click "Users" → "Add users"
-   - User name: `feedtape-polly-user`
-   - Select: "Programmatic access"
-
-3. **Set Permissions**
-   - Attach policy: `AmazonPollyReadOnlyAccess`
-   - Review and create user
-   - **SAVE YOUR CREDENTIALS** (shown only once!)
-
-### 2. Run the App
+### 1. Install Dependencies
 
 ```bash
-cd feedtape-app-polly
-npx expo start
+cd /path/to/feedtape/app
+npm install
 ```
 
-### 3. Configure Credentials
+### 2. Build Native Code (First Time Only)
 
-When the app launches:
-1. A modal will appear asking for AWS credentials
-2. Enter your Access Key ID and Secret Access Key
-3. Region: `us-east-1` (recommended for lowest latency)
-4. Tap "Save"
+Since the app uses native modules (expo-speech), you need to prebuild:
 
-## Available Voices
-
-### European Spanish (ES-ES)
-- **Lucia** (Female, Neural) - Clear, professional
-- **Sergio** (Male, Neural) - Warm, friendly
-- **Conchita** (Female, Standard) - Traditional
-- **Enrique** (Male, Standard) - Formal
-
-### Mexican Spanish (ES-MX)
-- **Mia** (Female, Neural) - Young, energetic
-- **Andrés** (Male, Neural) - Mature, confident
-
-### US Spanish (ES-US)
-- **Lupe** (Female, Neural) - Neutral accent
-- **Pedro** (Male, Neural) - Clear pronunciation
-
-## Cost Breakdown
-
-### AWS Polly Pricing
-- **Neural voices**: $16 per 1 million characters
-- **Standard voices**: $4 per 1 million characters
-- **Free tier**: 1M neural chars/month (first year)
-
-### Example Usage
-- Average article: 3,000 characters
-- 10 articles/day = 30,000 chars/day
-- Monthly: 900,000 characters
-- **Cost**: FREE (within free tier) or ~$14.40/month after
-
-## Architecture
-
-```
-App.tsx
-  ├── AWS Credentials Modal
-  ├── ArticleDisplay (visual)
-  └── AudioPlayer
-       └── pollyTtsService
-            └── AWS SDK → Polly API
-                 └── Neural TTS Engine
+```bash
+npx expo prebuild --platform ios
 ```
 
-## Performance
+This creates the `ios/` folder with native Xcode project.
 
-- **Initial request**: 300-500ms
-- **Audio generation**: Real-time streaming
-- **Voice switching**: Instant
-- **Memory usage**: ~10MB for audio buffer
+### 3. Install iOS Pods
+
+```bash
+cd ios && pod install && cd ..
+```
+
+## Running the App
+
+### Option A: Using Production Backend (Recommended for Testing)
+
+The app is configured to use a production backend by default. Just run:
+
+```bash
+npm run ios
+```
+
+This will:
+- Start the Metro bundler
+- Build the iOS app
+- Launch the iOS Simulator
+- Install and run the app
+
+### Option B: Using Local Backend
+
+If you're running the backend locally on port 8080:
+
+```bash
+EXPO_PUBLIC_API_URL=http://localhost:8080 npm run ios
+```
+
+**Note:** The iOS Simulator can access `localhost` directly. If using a physical device, use your machine's IP address instead.
+
+## Common Commands
+
+```bash
+# Start Metro bundler only (if app is already installed)
+npm start
+
+# Run on iOS Simulator
+npm run ios
+
+# Clean build (if you have issues)
+cd ios && rm -rf build Pods && pod install && cd ..
+npm run ios
+
+# View Metro bundler logs
+# Press 'j' in terminal to open debugger
+```
 
 ## Troubleshooting
 
-### No Audio
-- Check internet connection (Polly requires internet)
-- Verify AWS credentials are correct
-- Check AWS console for API usage
-
-### Slow Response
-- Switch to us-east-1 region for lowest latency
-- Try standard voices for faster response
-- Check network speed
-
-### Authentication Error
-- Verify IAM user has `AmazonPollyReadOnlyAccess` policy
-- Check credentials are typed correctly
-- Ensure region matches your AWS setup
-
-## Security Notes
-
-⚠️ **IMPORTANT**: Never commit AWS credentials to git!
-
-For production:
-1. Use AWS Cognito for temporary credentials
-2. Implement server-side proxy for Polly calls
-3. Use environment variables for configuration
-4. Consider AWS Amplify for managed auth
-
-## Development
-
-### Project Structure
-```
-feedtape-app-polly/
-├── src/
-│   ├── components/
-│   │   ├── AudioPlayer.tsx    # Polly-enabled player
-│   │   └── ArticleDisplay.tsx # Article viewer
-│   ├── services/
-│   │   ├── pollyTtsService.ts # AWS Polly integration
-│   │   └── rssParser.ts       # RSS parsing
-│   ├── config/
-│   │   └── aws.config.ts      # AWS configuration
-│   └── data/
-│       └── samplePost.ts      # Sample RSS data
-└── App.tsx                    # Main app with credentials UI
+### "No bundle URL present"
+The Metro bundler isn't running or can't connect. Try:
+```bash
+npm start --reset-cache
 ```
 
-### Adding Features
-
-**To add more languages:**
-```typescript
-// In pollyTtsService.ts
-const FRENCH_VOICES = {
-  CELINE: { id: 'Celine', language: 'fr-FR', neural: true },
-  // ...
-};
+### Build fails with CocoaPods error
+```bash
+cd ios
+pod deintegrate
+pod install
+cd ..
 ```
 
-**To implement caching:**
-```typescript
-// Save generated audio
-const cache = new Map();
-if (cache.has(text)) {
-  return cache.get(text);
-}
-// Generate and cache...
+### Simulator not booting
+Open Xcode → Window → Devices and Simulators → Check simulator status
+
+### TTS not speaking
+- Check simulator volume (Hardware → Volume Up)
+- Native TTS may have limited support on Simulator - test on physical device if issues persist
+
+## Project Structure
+
+```
+src/
+├── components/     # UI components
+├── contexts/       # React Context (AuthContext)
+├── services/       # Business logic
+│   ├── nativeTtsService.ts  # Text-to-speech
+│   ├── authService.ts       # GitHub OAuth
+│   ├── feedService.ts       # RSS feeds
+│   └── apiClient.ts         # HTTP client
+├── config/         # Environment config
+└── types/          # TypeScript types
 ```
 
-## Comparison with Native Version
+## Backend Dependency
 
-### When to use Native (AVSpeechSynthesizer):
-- Offline usage required
-- Cost is a concern
-- Instant response needed
-- Basic quality acceptable
+The app requires a backend server for:
+- GitHub OAuth authentication
+- Storing user's feed subscriptions
 
-### When to use Polly:
-- Professional audio quality needed
-- Multiple voice options required
-- Pause/resume support important
-- Cloud features beneficial
+**Default API:** `https://delightful-freedom-production.up.railway.app`
 
-## Next Steps
-
-1. **Production Setup**:
-   - Implement AWS Cognito for secure auth
-   - Add audio caching for popular articles
-   - Create backend API for credentials
-
-2. **Features**:
-   - Add bookmarking system
-   - Implement playlist functionality
-   - Add background playback
-   - Create article queue
-
-3. **Optimization**:
-   - Pre-generate audio for new articles
-   - Implement progressive loading
-   - Add offline fallback to native TTS
-
-## Support
-
-- AWS Polly Docs: https://docs.aws.amazon.com/polly/
-- Expo Audio: https://docs.expo.dev/versions/latest/sdk/audio/
-- AWS Free Tier: https://aws.amazon.com/free/
-
-## License
-
-MIT - Free to use and modify
+To use a local backend, set `EXPO_PUBLIC_API_URL` as shown above.

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "feedtape-app-polly",
-    "slug": "feedtape-app-polly",
+    "name": "FeedTape",
+    "slug": "feedtape",
     "version": "1.0.0",
     "scheme": "feedtape",
     "orientation": "portrait",
@@ -15,12 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "infoPlist": {
-        "UIBackgroundModes": [
-          "audio"
-        ]
-      },
-      "bundleIdentifier": "com.anonymous.feedtape-app-polly"
+      "bundleIdentifier": "com.feedtape.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -29,7 +24,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.feedtapeapppolly"
+      "package": "com.feedtape.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"

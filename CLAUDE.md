@@ -4,12 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-FeedTape is a React Native/Expo mobile app that converts RSS feeds to high-quality audio using a backend TTS (text-to-speech) service. Users authenticate with GitHub OAuth, manage their RSS feed subscriptions, and listen to articles as audio with background playback support via AirPods/AirPlay.
+FeedTape is a React Native/Expo mobile app that converts RSS feeds to audio using iOS/Android native text-to-speech. Users authenticate with GitHub OAuth, manage their RSS feed subscriptions, and listen to articles as audio.
 
 **Tech Stack:**
 - Frontend: React Native (0.81.4), Expo (~54.0), TypeScript
-- Audio: `react-native-track-player` for background playback, `expo-av` as fallback
-- Backend Integration: REST API at `https://delightful-freedom-production.up.railway.app` (prod) or `http://localhost:8080` (dev)
+- TTS: `expo-speech` (iOS AVSpeechSynthesizer / Android TextToSpeech)
+- Backend Integration: REST API for auth and feed management
 - Authentication: GitHub OAuth via expo-web-browser, JWT tokens stored in expo-secure-store
 - State Management: React Context (AuthContext)
 
@@ -17,37 +17,27 @@ FeedTape is a React Native/Expo mobile app that converts RSS feeds to high-quali
 
 ### Running the App
 ```bash
-# Standard development (uses production API)
+# Standard development
 npm start
 
-# iOS development with local backend
-npm run ios:dev
+# iOS development
+npm run ios
 
-# Android development with local backend
-npm run android:dev
-
-# Development with custom backend URL
-EXPO_PUBLIC_API_URL=http://YOUR_LOCAL_IP:8080 npm start
+# Android development
+npm run android
 ```
 
 ### Platform-Specific Commands
 ```bash
 # iOS
-npm run ios              # Production backend
-npm run ios:dev          # Local backend
+npm run ios
 
 # Android
-npm run android          # Production backend
-npm run android:dev      # Local backend
+npm run android
 
 # Web (limited support)
 npm run web
 ```
-
-### Environment Variables
-- `EXPO_PUBLIC_API_URL`: Override the API base URL (defaults to production)
-  - Production: `https://delightful-freedom-production.up.railway.app`
-  - Local dev: `http://localhost:8080`
 
 ## Architecture
 
@@ -60,16 +50,11 @@ The app uses a **singleton service pattern** for all major features:
    - `AuthContext` manages auth state globally, provides `useAuth()` hook
    - Token refresh handled automatically by `ApiClient` on 401 responses
 
-2. **Audio Playback** (`trackPlayerService.ts` is primary, `ttsService.ts` is legacy)
-   - **Primary**: `trackPlayerService` - Uses `react-native-track-player` for background audio, lock screen controls, AirPods support
-   - **Legacy**: `ttsService` - Uses `expo-av`, kept for reference but NOT actively used
-   - Audio workflow:
-     1. Call `/api/tts/synthesize` with article text + link
-     2. Backend returns MP3 audio (binary)
-     3. Convert blob → base64 → save to local cache using `react-native-fs`
-     4. Play via TrackPlayer with file:// URI
-     5. Track progress with interval timer, update UI callback
-     6. Clean up cached file after playback stops
+2. **Text-to-Speech** (`nativeTtsService.ts`)
+   - Uses `expo-speech` which wraps iOS AVSpeechSynthesizer and Android TextToSpeech
+   - Simple foreground playback with play/pause/stop controls
+   - Supports multiple languages and system voices
+   - **Deferred features** (future task): Background playback, lock screen controls, progress tracking
 
 3. **Feed Management** (`feedService.ts`)
    - `getFeeds()`: Fetch user's saved feed URLs from backend
@@ -92,7 +77,7 @@ App.tsx (AuthProvider wrapper)
       │   └─ FeedListItem (individual feed)
       └─ TrackList (articles from selected feed)
           ├─ TrackItem (individual article)
-          └─ MinimalPlayer (playback controls, progress bar)
+          └─ AudioPlayer (playback controls)
 ```
 
 ### Navigation Pattern
@@ -117,13 +102,13 @@ Navigation is **state-based** (not using React Navigation):
 3. Display articles in TrackList
 4. User selects article → `selectArticle(index)`
 5. User taps play → `handlePlayPause()`
-6. Call `trackPlayerService.speak(article.plainText, article.link, { onProgressUpdate })`
-7. Backend TTS generates audio → save to cache → play via TrackPlayer
-8. Progress updates via callback, update UI every 100ms
+6. Call `nativeTtsService.speak(article.plainText, options)`
+7. iOS/Android native TTS speaks the text directly
+8. Playback stops when done or user taps stop
 
-## API Integration (OpenAPI Spec)
+## API Integration
 
-Backend API spec is defined in `openapi.yaml`. Key endpoints:
+Backend API for auth and feed management. Key endpoints:
 
 - **Auth:**
   - `GET /auth/oauth/github?mobile=true` - Start OAuth flow
@@ -132,7 +117,7 @@ Backend API spec is defined in `openapi.yaml`. Key endpoints:
   - `POST /auth/logout` - Invalidate refresh token
 
 - **User:**
-  - `GET /api/me` - Get user info, settings, subscription (usage limits)
+  - `GET /api/me` - Get user info, settings, subscription
   - `PATCH /api/me` - Update user settings
 
 - **Feeds:**
@@ -140,11 +125,6 @@ Backend API spec is defined in `openapi.yaml`. Key endpoints:
   - `POST /api/feeds` - Add feed (requires client-generated UUID)
   - `PUT /api/feeds/{feedId}` - Update feed title
   - `DELETE /api/feeds/{feedId}` - Delete feed
-
-- **TTS:**
-  - `POST /api/tts/synthesize` - Convert text to audio (returns MP3 binary)
-    - Body: `{ text: string, link: string, language?: 'auto' | 'es' | 'en' | ... }`
-    - Response: `audio/mpeg` with headers `X-Duration-Seconds`, `X-Character-Count`
 
 All protected endpoints require `Authorization: Bearer <token>` header (handled by ApiClient).
 
@@ -155,49 +135,51 @@ All protected endpoints require `Authorization: Bearer <token>` header (handled 
 - Refresh tokens are long-lived
 - `ApiClient` automatically refreshes on 401
 - Tokens stored in `expo-secure-store` (encrypted on-device storage)
-- Token refresh updates SecureStore via callback
 
-### Audio Playback Gotchas
-- **MUST use file:// URIs** - TrackPlayer on iOS doesn't support data URIs, must save to cache
-- **Clean up cache** - Old audio files left in `RNFS.CachesDirectoryPath`, delete on stop
-- **Progress tracking** - TrackPlayer doesn't auto-update, must poll position every 100ms
-- **Background audio** - TrackPlayer handles lock screen controls automatically via capabilities config
+### Native TTS Notes
+- Uses `expo-speech` for cross-platform TTS
+- Speaks directly (no audio file generation)
+- Pause/resume works on iOS, may not work on Android
+- Available voices depend on device/OS language packs
 
 ### RSS Parsing
 - RSS fetched directly from feed URLs (not proxied)
 - Parser extracts: `title`, `link`, `contentSnippet` (plain text), `isoDate`
 - HTML stripped from content for TTS input
 
-### Development Workflow
-- Backend runs separately (not in this repo)
-- For local backend testing, use `npm run ios:dev` or set `EXPO_PUBLIC_API_URL`
-- OAuth callback URL must match backend config (`feedtape://auth/callback`)
-
 ## Testing Notes
 
-No automated tests currently configured. To manually test:
+To manually test:
 
 1. **Authentication:** Login with GitHub account, verify tokens stored
 2. **Feed Management:** Add/remove feeds, verify persistence across app restarts
-3. **Playback:** Test with various article lengths, verify background playback works with screen locked
+3. **Playback:** Test with various article lengths, verify TTS speaks correctly
 4. **Token Refresh:** Wait >1 hour, verify token auto-refresh on API call
-5. **Offline Behavior:** Test with no network (should gracefully handle TTS errors)
+
+## Deferred Features (Future Tasks)
+
+The following features are planned but not yet implemented:
+
+- **Background audio playback** - Play while app is minimized
+- **Lock screen controls** - Control playback from lock screen
+- **AirPods/AirPlay support** - External audio device integration
+- **Progress tracking** - Visual progress bar during playback
+
+These will require integrating `react-native-track-player` with TTS audio file generation.
 
 ## Common Development Tasks
 
-### Adding a New TTS Voice/Language
-1. Backend must support the language in TTS service
-2. Update `language` type in `src/types/index.ts` (`TtsRequest`)
-3. Pass language in `trackPlayerService.speak()` options
+### Adding a New Language
+1. Check `expo-speech` supports the language code
+2. Update `nativeTtsService.speak()` options with language parameter
+3. Test on device (language packs may need to be installed)
 
-### Debugging Audio Issues
-- Check console logs: `[TrackPlayer]` prefix
-- Verify file saved: `console.log` fileUri in `trackPlayerService.ts:221`
-- Test with `ttsService` (expo-av) to isolate TrackPlayer issues
-- Check iOS audio session settings in `trackPlayerService.ts:76`
+### Debugging TTS Issues
+- Check console logs: `[NativeTTS]` prefix
+- Verify `expo-speech` is properly installed
+- Test on real device (simulators may have limited TTS support)
 
 ### Modifying API Calls
-- Update `openapi.yaml` first (source of truth)
-- TypeScript types in `src/types/index.ts` should match OpenAPI schemas
+- TypeScript types in `src/types/index.ts`
 - Add/update service methods in appropriate service file
 - Handle errors with user-friendly `Alert.alert()` messages
