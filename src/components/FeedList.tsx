@@ -83,6 +83,7 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
           <Ionicons name="settings-sharp" size={24} color={colors.foreground} />
         </TouchableOpacity>
       </View>
+      <View style={styles.divider} />
 
       {/* Main Content */}
       {isLoading ? (
@@ -176,8 +177,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundWhite,
   },
   logoText: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "700",
+    letterSpacing: -0.8,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
   },
   // Hero Card
   cardContainer: {
