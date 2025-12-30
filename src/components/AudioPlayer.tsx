@@ -6,15 +6,19 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/colors';
 
 interface AudioPlayerProps {
   currentTrack?: {
     title: string;
+    feedName?: string;
   };
   isPlaying: boolean;
   isLoading?: boolean;
+  progress?: number; // 0-1
+  duration?: string; // e.g., "2:30"
   onPlayPause: () => void;
   onSkipBack: () => void;
   onSkipForward: () => void;
@@ -24,59 +28,62 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   currentTrack,
   isPlaying,
   isLoading = false,
+  progress = 0,
+  duration = '0:00',
   onPlayPause,
-  onSkipBack,
   onSkipForward,
 }) => {
+  if (!currentTrack) {
+    return null;
+  }
+
   return (
-    <View style={styles.container}>
-      <View style={styles.innerContainer}>
-        {/* Current Track Title */}
-        {currentTrack && (
-          <View style={styles.trackInfo}>
-            <Text style={styles.trackTitle} numberOfLines={1}>
-              {currentTrack.title}
+    <View style={styles.playerBar}>
+      {/* Progress Bar at top */}
+      <View style={styles.progressBarBackground}>
+        <LinearGradient
+          colors={[colors.progressStart, colors.progressEnd]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[styles.progressBarFill, { width: `${Math.max(progress * 100, 5)}%` }]}
+        />
+      </View>
+
+      <View style={styles.playerContent}>
+        {/* Track Info */}
+        <View style={styles.trackInfo}>
+          <Text style={styles.trackTitle} numberOfLines={1}>
+            {currentTrack.title}
+          </Text>
+          {currentTrack.feedName && (
+            <Text style={styles.trackSource} numberOfLines={1}>
+              {currentTrack.feedName}
             </Text>
-          </View>
-        )}
+          )}
+        </View>
 
         {/* Controls */}
-        <View style={styles.controls}>
-          {/* Skip Back */}
-          <TouchableOpacity
-            onPress={onSkipBack}
-            style={styles.controlButton}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="play-skip-back" size={20} color={colors.foreground} />
-          </TouchableOpacity>
+        <View style={styles.playerControls}>
+          <Text style={styles.timeText}>{duration}</Text>
 
-          {/* Play/Pause */}
           <TouchableOpacity
             onPress={onPlayPause}
-            style={styles.playButton}
-            activeOpacity={0.9}
+            style={styles.controlIcon}
             disabled={isLoading}
           >
             {isLoading ? (
-              <ActivityIndicator size="large" color={colors.buttonText} />
+              <ActivityIndicator size="small" color={colors.foreground} />
             ) : (
               <Ionicons
                 name={isPlaying ? 'pause' : 'play'}
-                size={24}
-                color={colors.buttonText}
-                style={!isPlaying && { marginLeft: 2 }} // Center play icon optically
+                size={28}
+                color={colors.foreground}
               />
             )}
           </TouchableOpacity>
 
-          {/* Skip Forward */}
-          <TouchableOpacity
-            onPress={onSkipForward}
-            style={styles.controlButton}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="play-skip-forward" size={20} color={colors.foreground} />
+          <TouchableOpacity onPress={onSkipForward} style={styles.controlIcon}>
+            <Ionicons name="play-skip-forward" size={28} color={colors.foreground} />
           </TouchableOpacity>
         </View>
       </View>
@@ -85,7 +92,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
+  playerBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
@@ -93,42 +100,48 @@ const styles = StyleSheet.create({
     backgroundColor: colors.playerBg,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    zIndex: 50,
+    paddingBottom: 20, // For iPhone X+ home indicator
   },
-  innerContainer: {
-    maxWidth: 448,         // max-w-md = 448px (28rem)
-    marginHorizontal: 'auto',
-    paddingHorizontal: 32, // px-8 = 32px
-    paddingVertical: 24,   // py-6 = 24px
+  progressBarBackground: {
+    height: 4,
+    backgroundColor: colors.muted,
+    width: '100%',
+  },
+  progressBarFill: {
+    height: '100%',
+  },
+  playerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 15,
   },
   trackInfo: {
-    alignItems: 'center',
-    marginBottom: 20,      // mb-5 = 20px
+    flex: 1,
+    marginRight: 16,
   },
   trackTitle: {
-    fontSize: 18,          // text-lg = 18px
-    fontWeight: '300',     // font-light
+    fontSize: 15,
+    fontWeight: '700',
     color: colors.foreground,
-    textAlign: 'center',
   },
-  controls: {
+  trackSource: {
+    fontSize: 13,
+    color: colors.mutedForeground,
+    marginTop: 2,
+  },
+  playerControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 48,               // gap-12 = 48px
   },
-  controlButton: {
-    width: 44,             // h-11 w-11 = 44px
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
+  timeText: {
+    fontSize: 12,
+    color: colors.mutedForeground,
+    marginRight: 15,
   },
-  playButton: {
-    width: 56,             // h-14 w-14 = 56px
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.buttonBg,
-    justifyContent: 'center',
-    alignItems: 'center',
+  controlIcon: {
+    marginLeft: 15,
+    padding: 4,
   },
 });

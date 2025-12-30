@@ -3,18 +3,22 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  ScrollView,
   SafeAreaView,
-  Image,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Dimensions,
+  StatusBar,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { FeedListItem } from './FeedListItem';
 import { colors } from '../constants/colors';
 import { Feed } from '../types';
 import feedService from '../services/feedService';
+
+const { width } = Dimensions.get('window');
 
 interface FeedListProps {
   onFeedSelect: (feed: Feed) => void;
@@ -55,87 +59,109 @@ export const FeedList: React.FC<FeedListProps> = ({
     }
   };
 
-  const handleRefresh = () => {
-    loadFeeds(true);
-  };
-
   const handleFeedPress = (feed: Feed) => {
     console.log(`[FeedList] Feed selected: ${feed.title}`);
     setActiveFeed(feed);
     onFeedSelect(feed);
   };
 
+  const handleAddFeed = () => {
+    Alert.alert('Coming Soon', 'Add feed functionality will be available soon.');
+  };
+
+  const handleDailyPlay = () => {
+    Alert.alert('Coming Soon', 'Daily feedtape functionality will be available soon.');
+  };
+
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerInner}>
-          {/* Refresh Button - Top Left */}
-          <TouchableOpacity
-            onPress={handleRefresh}
-            style={styles.refreshButton}
-            disabled={isRefreshing}
-            testID="refresh-button"
-          >
-            {isRefreshing ? (
-              <ActivityIndicator size="small" color={colors.foregroundMedium} />
-            ) : (
-              <Ionicons
-                name="refresh"
-                size={20}
-                color={colors.foregroundMedium}
-              />
-            )}
-          </TouchableOpacity>
-
-          {/* Logo - Centered */}
-          <Image
-            source={require('../../assets/feedtape-logo.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-
-          {/* Settings Button - Top Right */}
-          <TouchableOpacity
-            onPress={onSettingsPress}
-            style={styles.settingsButton}
-          >
-            <Ionicons
-              name="ellipsis-vertical"
-              size={20}
-              color={colors.foregroundMedium}
-            />
-          </TouchableOpacity>
+        <View style={styles.logoContainer}>
+          <Text style={styles.logoTextMain}>feed</Text>
+          <Text style={styles.logoTextAccent}>tape</Text>
         </View>
+        <TouchableOpacity onPress={onSettingsPress}>
+          <Ionicons name="settings-sharp" size={24} color={colors.foreground} />
+        </TouchableOpacity>
       </View>
 
-      {/* Feed List */}
+      {/* Main Content */}
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.foreground} />
           <Text style={styles.loadingText}>Loading feeds...</Text>
         </View>
-      ) : feeds.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="globe-outline" size={64} color={colors.mutedForeground} />
-          <Text style={styles.emptyTitle}>No feeds yet</Text>
-          <Text style={styles.emptySubtitle}>
-            Add your first RSS feed to get started
-          </Text>
-        </View>
       ) : (
-        <FlatList
-          data={feeds}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <FeedListItem
-              title={item.title || item.url}
-              isActive={activeFeed?.id === item.id}
-              onPress={() => handleFeedPress(item)}
-            />
-          )}
-          style={styles.list}
-        />
+        <ScrollView
+          style={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Hero Card */}
+          <View style={styles.cardContainer}>
+            <View style={styles.card}>
+              {/* Cassette Icon */}
+              <View style={styles.cassetteContainer}>
+                <MaterialCommunityIcons
+                  name="cassette"
+                  size={100}
+                  color={colors.cassetteOrange}
+                />
+              </View>
+
+              <Text style={styles.cardTitle}>Your daily feedtape is ready - 3:30</Text>
+
+              <TouchableOpacity onPress={handleDailyPlay} activeOpacity={0.8}>
+                <LinearGradient
+                  colors={[colors.playGradientStart, colors.playGradientEnd]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.playButton}
+                >
+                  <Ionicons name="play" size={22} color={colors.buttonText} style={styles.playIcon} />
+                  <Text style={styles.playButtonText}>PLAY</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* My Feeds Section */}
+          <View style={styles.feedSection}>
+            <View style={styles.feedHeader}>
+              <Text style={styles.feedHeaderTitle}>my feeds</Text>
+              <TouchableOpacity onPress={handleAddFeed}>
+                <Feather name="plus" size={24} color={colors.foreground} />
+              </TouchableOpacity>
+            </View>
+
+            {feeds.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="globe-outline" size={48} color={colors.mutedForeground} />
+                <Text style={styles.emptyTitle}>No feeds yet</Text>
+                <Text style={styles.emptySubtitle}>
+                  Tap + to add your first RSS feed
+                </Text>
+              </View>
+            ) : (
+              feeds.map((feed, index) => (
+                <FeedListItem
+                  key={feed.id}
+                  title={feed.title || feed.url}
+                  subtitle="7 new tracks - 3:20"
+                  isActive={activeFeed?.id === feed.id}
+                  isGrayedOut={index === feeds.length - 1 && feeds.length > 3}
+                  onPress={() => handleFeedPress(feed)}
+                  onPlayPress={() => handleFeedPress(feed)}
+                />
+              ))
+            )}
+
+            {/* Bottom padding for player bar */}
+            <View style={{ height: 120 }} />
+          </View>
+        </ScrollView>
       )}
     </SafeAreaView>
   );
@@ -146,43 +172,102 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+  contentContainer: {
+    flex: 1,
   },
-  headerInner: {
-    maxWidth: 448, // max-w-md
-    marginHorizontal: 'auto',
-    width: '100%',
+  // Header
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: colors.backgroundWhite,
+  },
+  logoContainer: {
+    flexDirection: 'row',
+  },
+  logoTextMain: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.logoMain,
+  },
+  logoTextAccent: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.logoAccent,
+  },
+  // Hero Card
+  cardContainer: {
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  card: {
+    backgroundColor: colors.cardBg,
+    width: width * 0.9,
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  cassetteContainer: {
+    marginBottom: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.cassetteBg,
+    padding: 15,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: colors.foregroundDark,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 25,
+    color: colors.foregroundDark,
+  },
+  playButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32, // px-8
-    paddingVertical: 48, // py-12
-    position: 'relative',
+    paddingVertical: 14,
+    paddingHorizontal: 60,
+    borderRadius: 4,
   },
-  logo: {
-    height: 64, // h-16 = 64px
-    width: 200,
+  playIcon: {
+    marginRight: 8,
   },
-  refreshButton: {
-    position: 'absolute',
-    left: 32,
-    top: '50%',
-    transform: [{ translateY: -10 }],
-    padding: 8,
+  playButtonText: {
+    color: colors.buttonText,
+    fontSize: 16,
+    fontWeight: 'bold',
+    letterSpacing: 1,
   },
-  settingsButton: {
-    position: 'absolute',
-    right: 32,
-    top: '50%',
-    transform: [{ translateY: -10 }],
-    padding: 8,
+  // Feed List
+  feedSection: {
+    paddingHorizontal: 20,
+    marginTop: 30,
   },
-  list: {
-    flex: 1,
+  feedHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
   },
+  feedHeaderTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.foreground,
+  },
+  // Loading & Empty States
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -195,22 +280,20 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
   },
   emptyContainer: {
-    flex: 1,
+    paddingVertical: 48,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '500',
     color: colors.foreground,
-    marginTop: 24,
+    marginTop: 16,
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 14,
     color: colors.mutedForeground,
     textAlign: 'center',
-    lineHeight: 20,
   },
 });

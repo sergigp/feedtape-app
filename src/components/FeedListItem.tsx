@@ -1,61 +1,70 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/colors';
 
 interface FeedListItemProps {
   title: string;
+  subtitle?: string;
   isActive?: boolean;
+  isGrayedOut?: boolean;
   onPress?: () => void;
+  onPlayPress?: () => void;
 }
 
 export const FeedListItem: React.FC<FeedListItemProps> = ({
   title,
+  subtitle,
   isActive = false,
+  isGrayedOut = false,
   onPress,
+  onPlayPress,
 }) => {
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.7}
-      style={styles.container}
-    >
-      <View style={styles.content}>
-        <Text
-          style={[
-            styles.title,
-            isActive && styles.titleActive,
-          ]}
-          numberOfLines={1}
-          ellipsizeMode="tail"
-        >
+    <View style={styles.feedItem}>
+      <TouchableOpacity onPress={onPress} style={styles.textContainer}>
+        <Text style={[styles.feedTitle, isGrayedOut && styles.grayText]}>
           {title}
         </Text>
-      </View>
-    </TouchableOpacity>
+        {subtitle && (
+          <Text style={[styles.feedSubtitle, isGrayedOut && styles.grayText]}>
+            {isGrayedOut ? 'all played' : subtitle}
+          </Text>
+        )}
+      </TouchableOpacity>
+      <TouchableOpacity onPress={isGrayedOut ? onPress : onPlayPress}>
+        <Ionicons
+          name={isGrayedOut ? 'reload' : 'play'}
+          size={24}
+          color={isGrayedOut ? colors.grayedOut : colors.foreground}
+        />
+      </TouchableOpacity>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    position: 'relative',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  content: {
+  feedItem: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 32,  // px-8 = 32px
-    paddingVertical: 24,    // py-6 = 24px
+    marginBottom: 25,
   },
-  title: {
+  textContainer: {
     flex: 1,
-    fontSize: 18,          // text-lg = 18px
-    fontWeight: '300',     // font-light
-    color: colors.foreground,
-    opacity: 0.8,
+    marginRight: 16,
   },
-  titleActive: {
-    fontWeight: '400',     // font-normal
-    opacity: 1,
+  feedTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: colors.foregroundDark,
+    marginBottom: 4,
+  },
+  feedSubtitle: {
+    fontSize: 14,
+    color: colors.mutedForeground,
+  },
+  grayText: {
+    color: colors.grayedOut,
   },
 });

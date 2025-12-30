@@ -1,33 +1,59 @@
-// Design system colors extracted from web prototype
-// Original HSL values converted to RGB for React Native
+// Design system colors adapted from Figma + Gemini implementation
+// Purple to orange gradient theme
 
 export const colors = {
   // Background & Foreground
-  background: '#FFFFFF',        // hsl(0 0% 100%)
-  foreground: '#1A1A1A',        // hsl(0 0% 10%)
+  background: '#F7F8FA',
+  backgroundWhite: '#FFFFFF',
+  foreground: '#000000',
+  foregroundDark: '#333333',
 
-  // Muted (for progress bars, disabled states)
-  muted: '#F5F5F5',             // hsl(0 0% 96%)
-  mutedForeground: '#808080',   // hsl(0 0% 50%)
+  // Muted (for secondary text, disabled states)
+  muted: '#EEEEEE',
+  mutedForeground: '#888888',
+  grayedOut: '#C4C4C4',
 
   // Borders & Dividers
-  border: '#F0F0F0',            // hsl(0 0% 94%)
+  border: '#EEEEEE',
 
   // Text variations
-  foregroundLight: '#CCCCCC',   // ~80% opacity on foreground
-  foregroundMedium: '#999999',  // ~60% opacity on foreground
+  foregroundLight: '#CCCCCC',
+  foregroundMedium: '#888888',
+
+  // Brand gradient colors (purple to orange/yellow)
+  brandPurple: '#6A3093',
+  brandOrange: '#F05053',
+  brandYellow: '#FFC107',
+
+  // Logo colors
+  logoMain: '#6A3093',    // Purple
+  logoAccent: '#FFC107',  // Yellow/Orange
+
+  // Play button gradient
+  playGradientStart: '#6A3093',
+  playGradientEnd: '#F05053',
+
+  // Progress bar gradient
+  progressStart: '#8E2DE2',
+  progressEnd: '#FF512F',
+
+  // Cassette colors
+  cassetteOrange: '#F5A623',
+  cassetteBg: '#FFE0B2',
+
+  // Card
+  cardBg: '#FFFFFF',
 
   // Player specific
   playerBg: '#FFFFFF',
-  playerShadow: '#F0F0F0',
 
   // Interactive elements
-  buttonBg: '#1A1A1A',          // hsl(0 0% 10%) - dark foreground for main button
+  buttonBg: '#000000',
   buttonText: '#FFFFFF',
 
   // Active/Selected states
-  activeText: '#1A1A1A',        // Darker for active items
-  inactiveText: '#CCCCCC',      // Lighter for inactive items
+  activeText: '#000000',
+  inactiveText: '#888888',
 };
 
 // Opacity values for consistent transparency
