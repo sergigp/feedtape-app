@@ -41,6 +41,14 @@ export interface Feed {
   url: string;
   title?: string;
   created_at?: string;
+  last_read_at?: string | null;
+}
+
+export interface FeedStats {
+  unreadCount: number;
+  totalDuration: number;
+  isLoading: boolean;
+  error?: boolean;
 }
 
 export interface ApiError {

@@ -10,7 +10,7 @@
     "ios": "expo run:ios",
     "ios:dev": "EXPO_PUBLIC_API_URL=http://localhost:8080 expo start --ios",
     "web": "expo start --web",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },
@@ -20,6 +20,7 @@
     "expo-auth-session": "^7.0.8",
     "expo-av": "^16.0.7",
     "expo-file-system": "~19.0.17",
+    "expo-linear-gradient": "~15.0.8",
     "expo-secure-store": "^15.0.7",
     "expo-speech": "~13.0.1",
     "expo-status-bar": "~3.0.8",

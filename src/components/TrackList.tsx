@@ -23,7 +23,6 @@ interface TrackListProps {
   isLoading: boolean;
   onTrackSelect: (index: number) => void;
   onPlayPause: () => void;
-  onSkipBack: () => void;
   onSkipForward: () => void;
   onBack: () => void;
   onSettingsPress: () => void;
@@ -39,7 +38,6 @@ export const TrackList: React.FC<TrackListProps> = ({
   isLoading,
   onTrackSelect,
   onPlayPause,
-  onSkipBack,
   onSkipForward,
   onBack,
   onSettingsPress,
@@ -116,7 +114,6 @@ export const TrackList: React.FC<TrackListProps> = ({
         isPlaying={isPlaying}
         isLoading={isLoading}
         onPlayPause={onPlayPause}
-        onSkipBack={onSkipBack}
         onSkipForward={onSkipForward}
       />
     </SafeAreaView>

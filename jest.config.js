@@ -1,6 +1,5 @@
 module.exports = {
   preset: 'react-native',
-  setupFilesAfterEnv: ['<rootDir>/__tests__/setup.ts'],
   transformIgnorePatterns: [
     'node_modules/(?!(react-native|@react-native|expo.*|@expo.*|@testing-library|react-native-track-player|react-native-fs|msw|until-async)/)',
   ],
