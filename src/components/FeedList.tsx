@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,25 +10,24 @@ import {
   Alert,
   Dimensions,
   StatusBar,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
-import { FeedListItem } from './FeedListItem';
-import { colors } from '../constants/colors';
-import { Feed } from '../types';
-import feedService from '../services/feedService';
+  Image,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons, Feather } from "@expo/vector-icons";
+import { FeedListItem } from "./FeedListItem";
+import { TechnicolorText } from "./TechnicolorText";
+import { colors } from "../constants/colors";
+import { Feed } from "../types";
+import feedService from "../services/feedService";
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
 
 interface FeedListProps {
   onFeedSelect: (feed: Feed) => void;
   onSettingsPress: () => void;
 }
 
-export const FeedList: React.FC<FeedListProps> = ({
-  onFeedSelect,
-  onSettingsPress,
-}) => {
+export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPress }) => {
   const [activeFeed, setActiveFeed] = useState<Feed | null>(null);
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -48,8 +47,8 @@ export const FeedList: React.FC<FeedListProps> = ({
       const fetchedFeeds = await feedService.getFeeds();
       setFeeds(fetchedFeeds);
     } catch (error) {
-      console.error('[FeedList] Failed to load feeds:', error);
-      Alert.alert('Error', 'Failed to load feeds. Please try again.');
+      console.error("[FeedList] Failed to load feeds:", error);
+      Alert.alert("Error", "Failed to load feeds. Please try again.");
     } finally {
       if (isRefresh) {
         setIsRefreshing(false);
@@ -66,11 +65,11 @@ export const FeedList: React.FC<FeedListProps> = ({
   };
 
   const handleAddFeed = () => {
-    Alert.alert('Coming Soon', 'Add feed functionality will be available soon.');
+    Alert.alert("Coming Soon", "Add feed functionality will be available soon.");
   };
 
   const handleDailyPlay = () => {
-    Alert.alert('Coming Soon', 'Daily feedtape functionality will be available soon.');
+    Alert.alert("Coming Soon", "Daily feedtape functionality will be available soon.");
   };
 
   return (
@@ -79,10 +78,7 @@ export const FeedList: React.FC<FeedListProps> = ({
 
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.logoContainer}>
-          <Text style={styles.logoTextMain}>feed</Text>
-          <Text style={styles.logoTextAccent}>tape</Text>
-        </View>
+        <TechnicolorText text="feedtape" style={styles.logoText} />
         <TouchableOpacity onPress={onSettingsPress}>
           <Ionicons name="settings-sharp" size={24} color={colors.foreground} />
         </TouchableOpacity>
@@ -95,19 +91,16 @@ export const FeedList: React.FC<FeedListProps> = ({
           <Text style={styles.loadingText}>Loading feeds...</Text>
         </View>
       ) : (
-        <ScrollView
-          style={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView style={styles.contentContainer} showsVerticalScrollIndicator={false}>
           {/* Hero Card */}
           <View style={styles.cardContainer}>
             <View style={styles.card}>
-              {/* Cassette Icon */}
-              <View style={styles.cassetteContainer}>
-                <MaterialCommunityIcons
-                  name="cassette"
-                  size={100}
-                  color={colors.cassetteOrange}
+              {/* Logo Image */}
+              <View style={styles.logoImageContainer}>
+                <Image
+                  source={require("../../assets/feedtape-logo.png")}
+                  style={styles.logoImage}
+                  resizeMode="contain"
                 />
               </View>
 
@@ -140,9 +133,7 @@ export const FeedList: React.FC<FeedListProps> = ({
               <View style={styles.emptyContainer}>
                 <Ionicons name="globe-outline" size={48} color={colors.mutedForeground} />
                 <Text style={styles.emptyTitle}>No feeds yet</Text>
-                <Text style={styles.emptySubtitle}>
-                  Tap + to add your first RSS feed
-                </Text>
+                <Text style={styles.emptySubtitle}>Tap + to add your first RSS feed</Text>
               </View>
             ) : (
               feeds.map((feed, index) => (
@@ -177,29 +168,20 @@ const styles = StyleSheet.create({
   },
   // Header
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 15,
     backgroundColor: colors.backgroundWhite,
   },
-  logoContainer: {
-    flexDirection: 'row',
-  },
-  logoTextMain: {
+  logoText: {
     fontSize: 22,
-    fontWeight: '700',
-    color: colors.logoMain,
-  },
-  logoTextAccent: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: colors.logoAccent,
+    fontWeight: "700",
   },
   // Hero Card
   cardContainer: {
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 20,
   },
   card: {
@@ -207,9 +189,9 @@ const styles = StyleSheet.create({
     width: width * 0.9,
     paddingVertical: 40,
     paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: 'center',
-    shadowColor: '#000',
+    borderRadius: 2,
+    alignItems: "center",
+    shadowColor: "#000",
     shadowOffset: {
       width: 0,
       height: 2,
@@ -218,26 +200,25 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 5,
   },
-  cassetteContainer: {
+  logoImageContainer: {
     marginBottom: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.cassetteBg,
-    padding: 15,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: colors.foregroundDark,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  logoImage: {
+    width: 140,
+    height: 106,
   },
   cardTitle: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
     marginBottom: 25,
     color: colors.foregroundDark,
   },
   playButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 14,
     paddingHorizontal: 60,
     borderRadius: 4,
@@ -248,7 +229,7 @@ const styles = StyleSheet.create({
   playButtonText: {
     color: colors.buttonText,
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     letterSpacing: 1,
   },
   // Feed List
@@ -257,21 +238,21 @@ const styles = StyleSheet.create({
     marginTop: 30,
   },
   feedHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 15,
   },
   feedHeaderTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: colors.foreground,
   },
   // Loading & Empty States
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 32,
   },
   loadingText: {
@@ -281,12 +262,12 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     paddingVertical: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   emptyTitle: {
     fontSize: 18,
-    fontWeight: '500',
+    fontWeight: "500",
     color: colors.foreground,
     marginTop: 16,
     marginBottom: 8,
@@ -294,6 +275,6 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     fontSize: 14,
     color: colors.mutedForeground,
-    textAlign: 'center',
+    textAlign: "center",
   },
 });
