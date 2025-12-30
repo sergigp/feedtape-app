@@ -20,7 +20,6 @@ interface AudioPlayerProps {
   progress?: number; // 0-1
   duration?: string; // e.g., "2:30"
   onPlayPause: () => void;
-  onSkipBack: () => void;
   onSkipForward: () => void;
 }
 

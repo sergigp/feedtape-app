@@ -173,12 +173,6 @@ function AppContent() {
     }
   };
 
-  const handleSkipBack = () => {
-    if (selectedIndex !== null && selectedIndex > 0) {
-      selectArticle(selectedIndex - 1);
-    }
-  };
-
   const handleSkipForward = () => {
     if (selectedIndex !== null && selectedIndex < articles.length - 1) {
       selectArticle(selectedIndex + 1);
@@ -232,7 +226,6 @@ function AppContent() {
             isLoading={isLoading}
             onTrackSelect={selectArticle}
             onPlayPause={handlePlayPause}
-            onSkipBack={handleSkipBack}
             onSkipForward={handleSkipForward}
             onBack={handleBackToFeedList}
             onSettingsPress={() => console.log('[App] Settings pressed - not implemented yet')}

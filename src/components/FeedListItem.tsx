@@ -1,13 +1,18 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/colors';
+import nativeTtsService from '../services/nativeTtsService';
 
 interface FeedListItemProps {
   title: string;
   subtitle?: string;
   isActive?: boolean;
   isGrayedOut?: boolean;
+  isLoading?: boolean;
+  unreadCount?: number;
+  duration?: number;
+  error?: boolean;
   onPress?: () => void;
   onPlayPress?: () => void;
 }
@@ -17,28 +22,45 @@ export const FeedListItem: React.FC<FeedListItemProps> = ({
   subtitle,
   isActive = false,
   isGrayedOut = false,
+  isLoading = false,
+  unreadCount,
+  duration,
+  error = false,
   onPress,
   onPlayPress,
 }) => {
+  const getSubtitle = () => {
+    if (isLoading) return 'Loading...';
+    if (error) return 'Failed to load';
+    if (isGrayedOut) return 'all played';
+    if (unreadCount !== undefined && duration !== undefined) {
+      const formattedDuration = nativeTtsService.formatDuration(duration);
+      return `${unreadCount} new tracks - ${formattedDuration}`;
+    }
+    return subtitle;
+  };
+
   return (
     <View style={styles.feedItem}>
       <TouchableOpacity onPress={onPress} style={styles.textContainer}>
         <Text style={[styles.feedTitle, isGrayedOut && styles.grayText]}>
           {title}
         </Text>
-        {subtitle && (
-          <Text style={[styles.feedSubtitle, isGrayedOut && styles.grayText]}>
-            {isGrayedOut ? 'all played' : subtitle}
-          </Text>
-        )}
+        <Text style={[styles.feedSubtitle, (isGrayedOut || error) && styles.grayText]}>
+          {getSubtitle()}
+        </Text>
       </TouchableOpacity>
-      <TouchableOpacity onPress={isGrayedOut ? onPress : onPlayPress}>
-        <Ionicons
-          name={isGrayedOut ? 'reload' : 'play'}
-          size={24}
-          color={isGrayedOut ? colors.grayedOut : colors.foreground}
-        />
-      </TouchableOpacity>
+      {isLoading ? (
+        <ActivityIndicator size="small" color={colors.foreground} />
+      ) : (
+        <TouchableOpacity onPress={isGrayedOut ? onPress : onPlayPress}>
+          <Ionicons
+            name={isGrayedOut ? 'reload' : 'play'}
+            size={24}
+            color={isGrayedOut ? colors.grayedOut : colors.foreground}
+          />
+        </TouchableOpacity>
+      )}
     </View>
   );
 };

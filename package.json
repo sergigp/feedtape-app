@@ -10,7 +10,7 @@
     "ios": "expo run:ios",
     "ios:dev": "EXPO_PUBLIC_API_URL=http://localhost:8080 expo start --ios",
     "web": "expo start --web",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },

@@ -11,14 +11,17 @@ import {
   Dimensions,
   StatusBar,
   Image,
+  RefreshControl,
 } from "react-native";
 import { Ionicons, Feather } from "@expo/vector-icons";
 import { FeedListItem } from "./FeedListItem";
 import { TechnicolorText } from "./TechnicolorText";
 import { TechnicolorButton } from "./TechnicolorButton";
 import { colors } from "../constants/colors";
-import { Feed } from "../types";
+import { Feed, FeedStats } from "../types";
 import feedService from "../services/feedService";
+import { parseRSSFeed } from "../services/rssParser";
+import nativeTtsService from "../services/nativeTtsService";
 
 const { width } = Dimensions.get("window");
 
@@ -30,12 +33,72 @@ interface FeedListProps {
 export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPress }) => {
   const [activeFeed, setActiveFeed] = useState<Feed | null>(null);
   const [feeds, setFeeds] = useState<Feed[]>([]);
+  const [feedStats, setFeedStats] = useState<Record<string, FeedStats>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     loadFeeds();
   }, []);
+
+  const loadFeedStats = async (feedsToLoad: Feed[]) => {
+    // Initialize all feeds as loading
+    const initialStats: Record<string, FeedStats> = {};
+    feedsToLoad.forEach((feed) => {
+      initialStats[feed.id] = { unreadCount: 0, totalDuration: 0, isLoading: true };
+    });
+    setFeedStats(initialStats);
+
+    // Fetch all feeds in parallel
+    const results = await Promise.allSettled(
+      feedsToLoad.map(async (feed) => {
+        const xmlContent = await feedService.fetchRSSContent(feed.url);
+        const articles = parseRSSFeed(xmlContent);
+
+        // Filter unread articles based on last_read_at
+        const lastReadAt = feed.last_read_at ? new Date(feed.last_read_at) : null;
+        const unreadArticles = articles.filter((article) => {
+          if (!lastReadAt) return true; // All unread if never read
+          if (!article.pubDate) return true; // Include if no pubDate
+          const articleDate = new Date(article.pubDate);
+          return articleDate > lastReadAt;
+        });
+
+        // Calculate total duration for unread articles
+        const totalDuration = unreadArticles.reduce((sum, article) => {
+          return sum + nativeTtsService.estimateDuration(article.plainText);
+        }, 0);
+
+        return {
+          feedId: feed.id,
+          unreadCount: unreadArticles.length,
+          totalDuration,
+        };
+      })
+    );
+
+    // Update stats for each feed
+    const updatedStats: Record<string, FeedStats> = {};
+    results.forEach((result, index) => {
+      const feedId = feedsToLoad[index].id;
+      if (result.status === "fulfilled") {
+        updatedStats[feedId] = {
+          unreadCount: result.value.unreadCount,
+          totalDuration: result.value.totalDuration,
+          isLoading: false,
+        };
+      } else {
+        console.error(`[FeedList] Failed to load stats for feed ${feedId}:`, result.reason);
+        updatedStats[feedId] = {
+          unreadCount: 0,
+          totalDuration: 0,
+          isLoading: false,
+          error: true,
+        };
+      }
+    });
+    setFeedStats(updatedStats);
+  };
 
   const loadFeeds = async (isRefresh = false) => {
     try {
@@ -46,6 +109,8 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
       }
       const fetchedFeeds = await feedService.getFeeds();
       setFeeds(fetchedFeeds);
+      // Load stats for all feeds in parallel
+      loadFeedStats(fetchedFeeds);
     } catch (error) {
       console.error("[FeedList] Failed to load feeds:", error);
       Alert.alert("Error", "Failed to load feeds. Please try again.");
@@ -92,7 +157,17 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
           <Text style={styles.loadingText}>Loading feeds...</Text>
         </View>
       ) : (
-        <ScrollView style={styles.contentContainer} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={() => loadFeeds(true)}
+              tintColor={colors.foreground}
+            />
+          }
+        >
           {/* Hero Card */}
           <View style={styles.cardContainer}>
             <View style={styles.card}>
@@ -131,17 +206,24 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
                 <Text style={styles.emptySubtitle}>Tap + to add your first RSS feed</Text>
               </View>
             ) : (
-              feeds.map((feed, index) => (
-                <FeedListItem
-                  key={feed.id}
-                  title={feed.title || feed.url}
-                  subtitle="7 new tracks - 3:20"
-                  isActive={activeFeed?.id === feed.id}
-                  isGrayedOut={index === feeds.length - 1 && feeds.length > 3}
-                  onPress={() => handleFeedPress(feed)}
-                  onPlayPress={() => handleFeedPress(feed)}
-                />
-              ))
+              feeds.map((feed) => {
+                const stats = feedStats[feed.id];
+                const isGrayedOut = stats && !stats.isLoading && stats.unreadCount === 0;
+                return (
+                  <FeedListItem
+                    key={feed.id}
+                    title={feed.title || feed.url}
+                    isActive={activeFeed?.id === feed.id}
+                    isLoading={stats?.isLoading}
+                    unreadCount={stats?.unreadCount}
+                    duration={stats?.totalDuration}
+                    error={stats?.error}
+                    isGrayedOut={isGrayedOut}
+                    onPress={() => handleFeedPress(feed)}
+                    onPlayPress={() => handleFeedPress(feed)}
+                  />
+                );
+              })
             )}
 
             {/* Bottom padding for player bar */}

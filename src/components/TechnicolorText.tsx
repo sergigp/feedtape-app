@@ -1,18 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TextStyle } from 'react-native';
-
-// Color waypoints defining the vibrant path from purple to yellow
-// These are used as stops for interpolation, not a fixed lookup
-const COLOR_STOPS = [
-  '#5C2F70',  // Purple (start)
-  '#733483',  // Purple-magenta
-  '#893781',  // Magenta
-  '#A13B7A',  // Pink-magenta
-  '#BA416E',  // Pink-coral
-  '#D24A5A',  // Coral-red
-  '#E66141',  // Orange-red
-  '#F7D75C',  // Yellow (end)
-];
+import { Text, TextStyle } from 'react-native';
+import { technicolorGradient } from '../constants/colors';
 
 /**
  * Converts hex color to RGB values
@@ -55,32 +43,32 @@ const interpolateColor = (color1: string, color2: string, factor: number): strin
  * Interpolates between adjacent color stops for smooth transitions
  */
 const getColorAtPosition = (position: number): string => {
-  if (position <= 0) return COLOR_STOPS[0];
-  if (position >= 1) return COLOR_STOPS[COLOR_STOPS.length - 1];
+  if (position <= 0) return technicolorGradient[0];
+  if (position >= 1) return technicolorGradient[technicolorGradient.length - 1];
 
   // Scale position to the color stops range
-  const scaledPosition = position * (COLOR_STOPS.length - 1);
+  const scaledPosition = position * (technicolorGradient.length - 1);
   const lowerIndex = Math.floor(scaledPosition);
   const upperIndex = Math.ceil(scaledPosition);
 
   // If we land exactly on a stop, return it directly
   if (lowerIndex === upperIndex) {
-    return COLOR_STOPS[lowerIndex];
+    return technicolorGradient[lowerIndex];
   }
 
   // Interpolate between the two adjacent stops
   const factor = scaledPosition - lowerIndex;
-  return interpolateColor(COLOR_STOPS[lowerIndex], COLOR_STOPS[upperIndex], factor);
+  return interpolateColor(technicolorGradient[lowerIndex], technicolorGradient[upperIndex], factor);
 };
 
 /**
  * Generates colors for each character in a text string
- * by interpolating along the vibrant color path defined by COLOR_STOPS
+ * by interpolating along the vibrant color path defined by technicolorGradient
  */
 export const getTechnicolorColors = (text: string): string[] => {
   const length = text.length;
   if (length === 0) return [];
-  if (length === 1) return [COLOR_STOPS[0]];
+  if (length === 1) return [technicolorGradient[0]];
 
   return text.split('').map((_, index) => {
     const position = index / (length - 1);
@@ -96,25 +84,21 @@ interface TechnicolorTextProps {
 /**
  * TechnicolorText component that renders each character with a color
  * interpolated between purple (#5C2F70) and yellow (#F7D75C)
+ *
+ * Uses nested Text components for better performance than separate Text elements
  */
 export const TechnicolorText: React.FC<TechnicolorTextProps> = ({ text, style }) => {
   const colors = getTechnicolorColors(text);
 
   return (
-    <View style={styles.container}>
+    <Text style={style}>
       {text.split('').map((char, index) => (
-        <Text key={index} style={[style, { color: colors[index] }]}>
+        <Text key={`${char}-${index}`} style={{ color: colors[index] }}>
           {char}
         </Text>
       ))}
-    </View>
+    </Text>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-  },
-});
 
 export default TechnicolorText;
