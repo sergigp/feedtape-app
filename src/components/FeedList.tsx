@@ -12,10 +12,10 @@ import {
   StatusBar,
   Image,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, Feather } from "@expo/vector-icons";
 import { FeedListItem } from "./FeedListItem";
 import { TechnicolorText } from "./TechnicolorText";
+import { TechnicolorButton } from "./TechnicolorButton";
 import { colors } from "../constants/colors";
 import { Feed } from "../types";
 import feedService from "../services/feedService";
@@ -107,17 +107,11 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
 
               <Text style={styles.cardTitle}>Your daily feedtape is ready - 3:30</Text>
 
-              <TouchableOpacity onPress={handleDailyPlay} activeOpacity={0.8}>
-                <LinearGradient
-                  colors={[colors.playGradientStart, colors.playGradientEnd]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.playButton}
-                >
-                  <Ionicons name="play" size={22} color={colors.buttonText} style={styles.playIcon} />
-                  <Text style={styles.playButtonText}>PLAY</Text>
-                </LinearGradient>
-              </TouchableOpacity>
+              <TechnicolorButton
+                label="PLAY"
+                icon="play"
+                onPress={handleDailyPlay}
+              />
             </View>
           </View>
 
@@ -220,23 +214,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginBottom: 25,
     color: colors.foregroundDark,
-  },
-  playButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 60,
-    borderRadius: 4,
-  },
-  playIcon: {
-    marginRight: 8,
-  },
-  playButtonText: {
-    color: colors.buttonText,
-    fontSize: 16,
-    fontWeight: "bold",
-    letterSpacing: 1,
   },
   // Feed List
   feedSection: {
