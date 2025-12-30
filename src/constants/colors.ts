@@ -3,7 +3,7 @@
 
 export const colors = {
   // Background & Foreground
-  background: "#F7F8FA",
+  background: "#FFFFFF",
   backgroundWhite: "#FFFFFF",
   foreground: "#000000",
   foregroundDark: "#333333",
@@ -47,7 +47,7 @@ export const colors = {
   cassetteBg: "#FFE0B2",
 
   // Card
-  cardBg: "#FFFFFF",
+  cardBg: "#F8F8F8",
 
   // Player specific
   playerBg: "#FFFFFF",
