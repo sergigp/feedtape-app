@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/colors';
 
 interface TrackItemProps {
@@ -35,17 +36,27 @@ export const TrackItem: React.FC<TrackItemProps> = ({
 
       {/* Content */}
       <View style={styles.content}>
+        {/* Title - takes most space, multi-line */}
         <Text
           style={[
             styles.title,
             isActive && styles.titleActive,
           ]}
-          numberOfLines={1}
-          ellipsizeMode="tail"
         >
           {title}
         </Text>
-        <Text style={styles.duration}>{duration}</Text>
+
+        {/* Right side: Duration + Play button */}
+        <View style={styles.rightContent}>
+          <Text style={styles.duration}>{duration}</Text>
+          <TouchableOpacity style={styles.playButton}>
+            <Ionicons
+              name="play"
+              size={20}
+              color={colors.foreground}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -67,27 +78,34 @@ const styles = StyleSheet.create({
   },
   content: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',  // Align to top for multi-line titles
     justifyContent: 'space-between',
-    paddingHorizontal: 32,  // px-8 = 32px
-    paddingVertical: 24,    // py-6 = 24px
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    gap: 12,
   },
   title: {
     flex: 1,
-    fontSize: 18,          // text-lg = 18px
-    fontWeight: '300',     // font-light
+    fontSize: 16,
+    fontWeight: '400',
     color: colors.foreground,
-    opacity: 0.8,
+    lineHeight: 22,
   },
   titleActive: {
-    fontWeight: '400',     // font-normal
-    opacity: 1,
+    fontWeight: '500',
+  },
+  rightContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   duration: {
-    fontSize: 16,          // text-base = 16px
+    fontSize: 14,
     color: colors.mutedForeground,
-    marginLeft: 24,        // ml-6 = 24px
-    fontWeight: '300',     // font-light
+    fontWeight: '400',
     fontVariant: ['tabular-nums'],
+  },
+  playButton: {
+    padding: 4,
   },
 });
