@@ -16,12 +16,12 @@ import { TechnicolorText } from './TechnicolorText';
 import { TechnicolorButton } from './TechnicolorButton';
 import { Post } from '../types';
 import { colors } from '../constants/colors';
+import readStatusService from '../services/readStatusService';
 
 const { width } = Dimensions.get('window');
 
 interface TrackListProps {
   feedTitle: string;
-  lastReadAt: string | null | undefined;
   posts: Post[];
   selectedIndex: number | null;
   progressMap: { [key: number]: number };
@@ -37,7 +37,6 @@ interface TrackListProps {
 
 export const TrackList: React.FC<TrackListProps> = ({
   feedTitle,
-  lastReadAt,
   posts,
   selectedIndex,
   progressMap,
@@ -50,17 +49,10 @@ export const TrackList: React.FC<TrackListProps> = ({
   onSettingsPress,
   getPostDuration,
 }) => {
-  // Calculate new tracks count based on last_read_at
+  // Calculate new tracks count based on read status
   const newTracksCount = React.useMemo(() => {
-    if (!lastReadAt) return posts.length; // All new if never read
-
-    const lastReadDate = new Date(lastReadAt);
-    return posts.filter(post => {
-      if (!post.pubDate) return true; // Include if no pubDate
-      const postDate = new Date(post.pubDate);
-      return postDate > lastReadDate;
-    }).length;
-  }, [posts, lastReadAt]);
+    return posts.filter(post => !readStatusService.isRead(post.link)).length;
+  }, [posts]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -145,6 +137,8 @@ export const TrackList: React.FC<TrackListProps> = ({
             title={item.title}
             duration={getPostDuration(item)}
             isActive={selectedIndex === index}
+            isPlaying={isPlaying && selectedIndex === index}
+            isRead={readStatusService.isRead(item.link)}
             progress={progressMap[index] || 0}
             onPress={() => onTrackSelect(index)}
           />
@@ -162,6 +156,7 @@ export const TrackList: React.FC<TrackListProps> = ({
         }
         isPlaying={isPlaying}
         isLoading={isLoading}
+        duration={selectedIndex !== null ? getPostDuration(posts[selectedIndex]) : '0:00'}
         onPlayPause={onPlayPause}
         onSkipForward={onSkipForward}
       />

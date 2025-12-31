@@ -22,6 +22,7 @@ import { Feed, FeedStats } from "../types";
 import feedService from "../services/feedService";
 import { parseRSSFeed } from "../services/rssParser";
 import nativeTtsService from "../services/nativeTtsService";
+import readStatusService from "../services/readStatusService";
 
 const { width } = Dimensions.get("window");
 
@@ -53,16 +54,12 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
     const results = await Promise.allSettled(
       feedsToLoad.map(async (feed) => {
         const xmlContent = await feedService.fetchRSSContent(feed.url);
-        // Parse with early termination optimization (stops at last_read_at)
-        const posts = parseRSSFeed(xmlContent, feed.last_read_at);
+        // Parse RSS feed (filters articles older than 90 days)
+        const posts = parseRSSFeed(xmlContent);
 
-        // Filter unread posts based on last_read_at (safety net for posts without dates)
-        const lastReadAt = feed.last_read_at ? new Date(feed.last_read_at) : null;
+        // Filter unread posts using read status service
         const unreadPosts = posts.filter((post) => {
-          if (!lastReadAt) return true; // All unread if never read
-          if (!post.pubDate) return true; // Include if no pubDate
-          const postDate = new Date(post.pubDate);
-          return postDate > lastReadAt;
+          return !readStatusService.isRead(post.link);
         });
 
         // Calculate total duration for unread posts

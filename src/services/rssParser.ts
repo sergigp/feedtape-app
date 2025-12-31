@@ -157,12 +157,18 @@ export function parseRSSItem(xmlString: string): Post | null {
 
 /**
  * Parse multiple RSS items from feed XML (supports both RSS <item> and Atom <entry>)
+ * Filters out articles older than RSS_ARTICLE_MAX_AGE_DAYS to prevent old articles
+ * from appearing as "unread" after read status cleanup.
+ *
  * @param xmlString - The RSS/Atom XML string to parse
- * @param lastReadAt - Optional ISO date string; stops parsing when encountering older posts (optimization)
  */
-export function parseRSSFeed(xmlString: string, lastReadAt?: string | null): Post[] {
+export function parseRSSFeed(xmlString: string): Post[] {
   const posts: Post[] = [];
-  const cutoffDate = lastReadAt ? new Date(lastReadAt) : null;
+
+  // CRITICAL: Must match CLEANUP_AGE_DAYS in readStatusService.ts
+  // Only show articles from last 90 days to prevent old articles showing as "unread"
+  const RSS_ARTICLE_MAX_AGE_DAYS = 90;
+  const cutoffDate = new Date(Date.now() - RSS_ARTICLE_MAX_AGE_DAYS * 24 * 60 * 60 * 1000);
 
   // Try RSS format first (<item> tags)
   const itemRegex = /<item>([\s\S]*?)<\/item>/g;
@@ -171,14 +177,6 @@ export function parseRSSFeed(xmlString: string, lastReadAt?: string | null): Pos
   while ((match = itemRegex.exec(xmlString)) !== null) {
     const post = parseRSSItem(`<item>${match[1]}</item>`);
     if (post) {
-      // Early termination: stop parsing if this post is older than cutoff
-      if (cutoffDate && post.pubDate) {
-        const postDate = new Date(post.pubDate);
-        if (postDate <= cutoffDate) {
-          console.log(`[RSSParser] Early stop: reached posts older than ${lastReadAt}`);
-          break;
-        }
-      }
       posts.push(post);
     }
   }
@@ -189,18 +187,29 @@ export function parseRSSFeed(xmlString: string, lastReadAt?: string | null): Pos
     while ((match = entryRegex.exec(xmlString)) !== null) {
       const post = parseRSSItem(`<entry>${match[1]}</entry>`);
       if (post) {
-        // Early termination: stop parsing if this post is older than cutoff
-        if (cutoffDate && post.pubDate) {
-          const postDate = new Date(post.pubDate);
-          if (postDate <= cutoffDate) {
-            console.log(`[RSSParser] Early stop: reached posts older than ${lastReadAt}`);
-            break;
-          }
-        }
         posts.push(post);
       }
     }
   }
 
-  return posts;
+  // Filter out articles older than 90 days
+  const recentPosts = posts.filter(post => {
+    if (!post.pubDate) {
+      // Keep articles without pubDate (edge case)
+      return true;
+    }
+
+    const postDate = new Date(post.pubDate);
+    const isRecent = postDate >= cutoffDate;
+
+    if (!isRecent) {
+      console.log(`[RSSParser] Filtering out old article (${post.pubDate}): ${post.title}`);
+    }
+
+    return isRecent;
+  });
+
+  console.log(`[RSSParser] Parsed ${recentPosts.length} recent articles (${posts.length - recentPosts.length} filtered as too old)`);
+
+  return recentPosts;
 }

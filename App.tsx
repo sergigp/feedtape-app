@@ -11,13 +11,15 @@ import { LoginScreen } from './src/components/LoginScreen';
 import { SplashScreen } from './src/components/SplashScreen';
 import { FeedList } from './src/components/FeedList';
 import { TrackList } from './src/components/TrackList';
+import { SettingsScreen } from './src/components/SettingsScreen';
 import { parseRSSFeed, Post } from './src/services/rssParser';
 import nativeTtsService from './src/services/nativeTtsService';
 import feedService from './src/services/feedService';
+import readStatusService from './src/services/readStatusService';
 import { colors } from './src/constants/colors';
 import { Feed } from './src/types';
 
-type Screen = 'splash' | 'feedList' | 'trackList';
+type Screen = 'splash' | 'feedList' | 'trackList' | 'settings';
 
 function AppContent() {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
@@ -37,6 +39,11 @@ function AppContent() {
 
   useEffect(() => {
     console.log('[App] Mounting');
+
+    // Initialize read status service
+    readStatusService.initialize().catch(error => {
+      console.error('[App] Failed to initialize read status:', error);
+    });
 
     return () => {
       nativeTtsService.stop();
@@ -75,8 +82,8 @@ function AppContent() {
       // Fetch RSS content from the feed URL
       const xmlContent = await feedService.fetchRSSContent(feed.url);
 
-      // Parse the RSS feed (optimized: stops at last_read_at for efficiency)
-      const posts = parseRSSFeed(xmlContent, feed.last_read_at);
+      // Parse the RSS feed (filters articles older than 90 days)
+      const posts = parseRSSFeed(xmlContent);
       console.log(`[App] Parsed ${posts.length} posts from ${feed.title}`);
 
       // Update posts state
@@ -107,10 +114,12 @@ function AppContent() {
   };
 
   // Track selection and playback handlers
-  const selectArticle = (index: number) => {
+  const selectArticle = async (index: number) => {
     console.log(`[App] Track selected: ${index}`);
-    // If already playing this article, do nothing
-    if (selectedIndex === index && isPlaying) {
+
+    // If clicking on the currently selected track, toggle play/pause
+    if (selectedIndex === index) {
+      await handlePlayPause();
       return;
     }
 
@@ -120,8 +129,54 @@ function AppContent() {
       setIsPlaying(false);
     }
 
+    // Select the new track
     setSelectedIndex(index);
     setProgressMap({ ...progressMap, [index]: 0 });
+
+    // Automatically start playing the newly selected track
+    const post = posts[index];
+    if (!post) return;
+
+    try {
+      setIsPlaying(true);
+
+      // Mark as read when starting playback
+      await readStatusService.markAsRead(
+        post.link,
+        selectedFeed?.id,
+        post.title
+      );
+
+      // Speak the post with title announcement
+      nativeTtsService.speakWithTitle(post.title, post.plainText, {
+        language: getLanguageForPost(post),
+        onDone: async () => {
+          console.log('[App] Post finished, checking for next unread post');
+          setIsPlaying(false);
+          // Find next unread post
+          const nextUnreadIndex = posts.findIndex((p, i) =>
+            i > index && !readStatusService.isRead(p.link)
+          );
+          if (nextUnreadIndex !== -1) {
+            console.log('[App] Waiting 2 seconds before next post');
+            // Wait 2 seconds before playing next post
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            console.log('[App] Auto-playing next unread post:', nextUnreadIndex);
+            selectArticle(nextUnreadIndex);
+          } else {
+            console.log('[App] No more unread posts');
+          }
+        },
+        onError: (error) => {
+          console.error('[App] TTS error:', error);
+          setIsPlaying(false);
+        },
+      });
+    } catch (error) {
+      console.error('[App] Playback error:', error);
+      Alert.alert('Playback Error', 'Failed to play audio.');
+      setIsPlaying(false);
+    }
   };
 
   const getLanguageForPost = (post: Post): string => {
@@ -164,11 +219,32 @@ function AppContent() {
         // Play using native TTS
         setIsPlaying(true);
 
-        // Speak the post (non-blocking, returns when done)
-        nativeTtsService.speak(post.plainText, {
+        // Mark as read when starting playback
+        await readStatusService.markAsRead(
+          post.link,
+          selectedFeed?.id,
+          post.title
+        );
+
+        // Speak the post with title announcement
+        nativeTtsService.speakWithTitle(post.title, post.plainText, {
           language: getLanguageForPost(post),
-          onDone: () => {
+          onDone: async () => {
+            console.log('[App] Post finished, checking for next unread post');
             setIsPlaying(false);
+            // Find next unread post
+            const nextUnreadIndex = posts.findIndex((p, i) =>
+              i > selectedIndex && !readStatusService.isRead(p.link)
+            );
+            if (nextUnreadIndex !== -1) {
+              console.log('[App] Waiting 2 seconds before next post');
+              // Wait 2 seconds before playing next post
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              console.log('[App] Auto-playing next unread post:', nextUnreadIndex);
+              selectArticle(nextUnreadIndex);
+            } else {
+              console.log('[App] No more unread posts');
+            }
           },
           onError: (error) => {
             console.error('[App] TTS error:', error);
@@ -192,6 +268,11 @@ function AppContent() {
   const getPostDuration = (post: Post): string => {
     const seconds = nativeTtsService.estimateDuration(post.plainText);
     return nativeTtsService.formatDuration(seconds);
+  };
+
+  const handleSettingsPress = () => {
+    console.log('[App] Navigating to settings');
+    setCurrentScreen('settings');
   };
 
   // Render current screen
@@ -221,7 +302,7 @@ function AppContent() {
         return (
           <FeedList
             onFeedSelect={handleFeedSelect}
-            onSettingsPress={() => console.log('[App] Settings pressed - not implemented yet')}
+            onSettingsPress={handleSettingsPress}
           />
         );
 
@@ -229,7 +310,6 @@ function AppContent() {
         return (
           <TrackList
             feedTitle={selectedFeed?.title || selectedFeed?.url || ''}
-            lastReadAt={selectedFeed?.last_read_at}
             posts={posts}
             selectedIndex={selectedIndex}
             progressMap={progressMap}
@@ -239,10 +319,13 @@ function AppContent() {
             onPlayPause={handlePlayPause}
             onSkipForward={handleSkipForward}
             onBack={handleBackToFeedList}
-            onSettingsPress={() => console.log('[App] Settings pressed - not implemented yet')}
+            onSettingsPress={handleSettingsPress}
             getPostDuration={getPostDuration}
           />
         );
+
+      case 'settings':
+        return <SettingsScreen onBack={() => setCurrentScreen('feedList')} />;
 
       default:
         return <SplashScreen />;

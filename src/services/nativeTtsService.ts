@@ -64,6 +64,94 @@ class NativeTtsService {
   }
 
   /**
+   * Speak article with title announcement
+   * Speaks the title first, pauses for 2 seconds, then speaks the content
+   */
+  async speakWithTitle(title: string, content: string, options?: SpeakOptions): Promise<void> {
+    // Stop any current speech
+    await this.stop();
+
+    console.log('[NativeTTS] Speaking with title:', title);
+    this.currentText = `${title}\n\n${content}`;
+    this.speaking = true;
+
+    try {
+      // First, speak the title
+      await new Promise<void>((resolve, reject) => {
+        Speech.speak(title, {
+          language: options?.language || 'en-US',
+          rate: options?.rate ?? 1.0,
+          pitch: options?.pitch ?? 1.0,
+          voice: options?.voice,
+          onStart: () => {
+            console.log('[NativeTTS] Speaking title');
+            options?.onStart?.();
+          },
+          onDone: () => {
+            console.log('[NativeTTS] Title completed');
+            resolve();
+          },
+          onError: (error) => {
+            console.error('[NativeTTS] Title speech error:', error);
+            reject(error);
+          },
+        });
+      });
+
+      // Check if we were stopped during title
+      if (!this.speaking) {
+        console.log('[NativeTTS] Stopped during title');
+        return;
+      }
+
+      // Pause for 2 seconds
+      console.log('[NativeTTS] Pausing for 2 seconds');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Check if we were stopped during pause
+      if (!this.speaking) {
+        console.log('[NativeTTS] Stopped during pause');
+        return;
+      }
+
+      // Then speak the content
+      await new Promise<void>((resolve, reject) => {
+        Speech.speak(content, {
+          language: options?.language || 'en-US',
+          rate: options?.rate ?? 1.0,
+          pitch: options?.pitch ?? 1.0,
+          voice: options?.voice,
+          onStart: () => {
+            console.log('[NativeTTS] Speaking content');
+          },
+          onDone: () => {
+            console.log('[NativeTTS] Content completed');
+            this.speaking = false;
+            this.currentText = null;
+            options?.onDone?.();
+            resolve();
+          },
+          onError: (error) => {
+            console.error('[NativeTTS] Content speech error:', error);
+            this.speaking = false;
+            this.currentText = null;
+            options?.onError?.(error);
+            reject(error);
+          },
+          onStopped: () => {
+            console.log('[NativeTTS] Content stopped');
+            this.speaking = false;
+          },
+        });
+      });
+    } catch (error) {
+      this.speaking = false;
+      this.currentText = null;
+      throw error;
+    }
+  }
+
+  /**
    * Stop current speech
    */
   async stop(): Promise<void> {
