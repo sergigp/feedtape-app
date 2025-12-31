@@ -11,8 +11,7 @@ import { LoginScreen } from './src/components/LoginScreen';
 import { SplashScreen } from './src/components/SplashScreen';
 import { FeedList } from './src/components/FeedList';
 import { TrackList } from './src/components/TrackList';
-import { parseRSSFeed, RSSItem } from './src/services/rssParser';
-import { sampleFeedXML } from './src/data/feedData';
+import { parseRSSFeed, Post } from './src/services/rssParser';
 import nativeTtsService from './src/services/nativeTtsService';
 import feedService from './src/services/feedService';
 import { colors } from './src/constants/colors';
@@ -21,14 +20,14 @@ import { Feed } from './src/types';
 type Screen = 'splash' | 'feedList' | 'trackList';
 
 function AppContent() {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
 
   // Navigation state
   const [currentScreen, setCurrentScreen] = useState<Screen>('splash');
   const [selectedFeed, setSelectedFeed] = useState<Feed | null>(null);
 
-  // Article state
-  const [articles, setArticles] = useState<RSSItem[]>([]);
+  // Post state
+  const [posts, setPosts] = useState<Post[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [progressMap, setProgressMap] = useState<{ [key: number]: number }>({});
 
@@ -38,7 +37,6 @@ function AppContent() {
 
   useEffect(() => {
     console.log('[App] Mounting');
-    loadFeed();
 
     return () => {
       nativeTtsService.stop();
@@ -67,17 +65,6 @@ function AppContent() {
     }
   }, [isAuthenticated, authLoading]);
 
-  const loadFeed = () => {
-    try {
-      const parsedArticles = parseRSSFeed(sampleFeedXML);
-      setArticles(parsedArticles);
-      console.log(`[App] Loaded ${parsedArticles.length} articles`);
-    } catch (error) {
-      console.error('[App] Error loading feed:', error);
-      Alert.alert('Error', 'Failed to load articles');
-    }
-  };
-
   // Navigation handlers
   const handleFeedSelect = async (feed: Feed) => {
     console.log(`[App] Feed selected: ${feed.title}, fetching RSS content`);
@@ -88,12 +75,12 @@ function AppContent() {
       // Fetch RSS content from the feed URL
       const xmlContent = await feedService.fetchRSSContent(feed.url);
 
-      // Parse the RSS feed
-      const parsedArticles = parseRSSFeed(xmlContent);
-      console.log(`[App] Parsed ${parsedArticles.length} articles from ${feed.title}`);
+      // Parse the RSS feed (optimized: stops at last_read_at for efficiency)
+      const posts = parseRSSFeed(xmlContent, feed.last_read_at);
+      console.log(`[App] Parsed ${posts.length} posts from ${feed.title}`);
 
-      // Update articles state
-      setArticles(parsedArticles);
+      // Update posts state
+      setPosts(posts);
 
       // Navigate to track list
       setCurrentScreen('trackList');
@@ -101,7 +88,7 @@ function AppContent() {
       console.error('[App] Failed to fetch/parse RSS feed:', error);
       Alert.alert(
         'Error Loading Feed',
-        'Failed to load articles from this feed. Please check the feed URL and try again.'
+        'Failed to load posts from this feed. Please check the feed URL and try again.'
       );
     } finally {
       setIsLoading(false);
@@ -137,11 +124,34 @@ function AppContent() {
     setProgressMap({ ...progressMap, [index]: 0 });
   };
 
+  const getLanguageForPost = (post: Post): string => {
+    // Priority 1: User preference override (optional)
+    if (user?.settings?.language) {
+      const userLangMap: Record<string, string> = {
+        'en': 'en-US',
+        'es': 'es-ES',
+        'fr': 'fr-FR',
+        'de': 'de-DE',
+        'pt': 'pt-PT',
+        'it': 'it-IT',
+      };
+      const mapped = userLangMap[user.settings.language];
+      if (mapped) {
+        console.log(`[App] User preference override: ${mapped}`);
+        return mapped;
+      }
+    }
+
+    // Priority 2: Use detected language (guaranteed to exist)
+    console.log(`[App] Using detected language: ${post.language}`);
+    return post.language;
+  };
+
   const handlePlayPause = async () => {
     if (selectedIndex === null) return;
 
-    const article = articles[selectedIndex];
-    if (!article) return;
+    const post = posts[selectedIndex];
+    if (!post) return;
 
     try {
       const speaking = await nativeTtsService.isSpeaking();
@@ -154,9 +164,9 @@ function AppContent() {
         // Play using native TTS
         setIsPlaying(true);
 
-        // Speak the article (non-blocking, returns when done)
-        nativeTtsService.speak(article.plainText, {
-          language: 'en-US', // TODO: Add language detection/selection
+        // Speak the post (non-blocking, returns when done)
+        nativeTtsService.speak(post.plainText, {
+          language: getLanguageForPost(post),
           onDone: () => {
             setIsPlaying(false);
           },
@@ -174,13 +184,13 @@ function AppContent() {
   };
 
   const handleSkipForward = () => {
-    if (selectedIndex !== null && selectedIndex < articles.length - 1) {
+    if (selectedIndex !== null && selectedIndex < posts.length - 1) {
       selectArticle(selectedIndex + 1);
     }
   };
 
-  const getArticleDuration = (article: RSSItem): string => {
-    const seconds = nativeTtsService.estimateDuration(article.plainText);
+  const getPostDuration = (post: Post): string => {
+    const seconds = nativeTtsService.estimateDuration(post.plainText);
     return nativeTtsService.formatDuration(seconds);
   };
 
@@ -219,9 +229,8 @@ function AppContent() {
         return (
           <TrackList
             feedTitle={selectedFeed?.title || selectedFeed?.url || ''}
-            feedId={selectedFeed?.id || ''}
             lastReadAt={selectedFeed?.last_read_at}
-            articles={articles}
+            posts={posts}
             selectedIndex={selectedIndex}
             progressMap={progressMap}
             isPlaying={isPlaying}
@@ -231,7 +240,7 @@ function AppContent() {
             onSkipForward={handleSkipForward}
             onBack={handleBackToFeedList}
             onSettingsPress={() => console.log('[App] Settings pressed - not implemented yet')}
-            getArticleDuration={getArticleDuration}
+            getPostDuration={getPostDuration}
           />
         );
 

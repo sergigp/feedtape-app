@@ -53,25 +53,26 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
     const results = await Promise.allSettled(
       feedsToLoad.map(async (feed) => {
         const xmlContent = await feedService.fetchRSSContent(feed.url);
-        const articles = parseRSSFeed(xmlContent);
+        // Parse with early termination optimization (stops at last_read_at)
+        const posts = parseRSSFeed(xmlContent, feed.last_read_at);
 
-        // Filter unread articles based on last_read_at
+        // Filter unread posts based on last_read_at (safety net for posts without dates)
         const lastReadAt = feed.last_read_at ? new Date(feed.last_read_at) : null;
-        const unreadArticles = articles.filter((article) => {
+        const unreadPosts = posts.filter((post) => {
           if (!lastReadAt) return true; // All unread if never read
-          if (!article.pubDate) return true; // Include if no pubDate
-          const articleDate = new Date(article.pubDate);
-          return articleDate > lastReadAt;
+          if (!post.pubDate) return true; // Include if no pubDate
+          const postDate = new Date(post.pubDate);
+          return postDate > lastReadAt;
         });
 
-        // Calculate total duration for unread articles
-        const totalDuration = unreadArticles.reduce((sum, article) => {
-          return sum + nativeTtsService.estimateDuration(article.plainText);
+        // Calculate total duration for unread posts
+        const totalDuration = unreadPosts.reduce((sum, post) => {
+          return sum + nativeTtsService.estimateDuration(post.plainText);
         }, 0);
 
         return {
           feedId: feed.id,
-          unreadCount: unreadArticles.length,
+          unreadCount: unreadPosts.length,
           totalDuration,
         };
       })

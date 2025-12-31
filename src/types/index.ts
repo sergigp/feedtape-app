@@ -42,6 +42,7 @@ export interface Feed {
   title?: string;
   created_at?: string;
   last_read_at?: string | null;
+  posts?: Post[];  // Feed optionally contains its posts
 }
 
 export interface FeedStats {
@@ -55,10 +56,19 @@ export interface ApiError {
   message: string;
 }
 
-export interface TtsRequest {
-  text: string;
-  language?: 'auto' | 'es' | 'en' | 'fr' | 'de' | 'pt' | 'it';
-  voice?: string;
-  speed?: number;
-  quality?: 'standard' | 'neural';
+// Post Type - Individual feed item with enriched metadata
+export interface Post {
+  title: string;
+  link: string;
+  pubDate: string;
+  author: string;
+  content: string;       // Raw HTML content
+  plainText: string;     // Clean text for TTS
+  language: string;      // BCP-47 code, always present, guaranteed 'en-US' minimum
+
+  // Future AI enrichments (not implemented yet):
+  // summary?: string;
+  // headline?: string;
+  // readingTime?: number;
+  // sentiment?: 'positive' | 'negative' | 'neutral';
 }

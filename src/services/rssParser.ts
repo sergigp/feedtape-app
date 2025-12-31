@@ -1,14 +1,15 @@
 // RSS Parser Service
 // Extracts and processes text content from RSS feed items
 
-export interface RSSItem {
-  title: string;
-  link: string;
-  pubDate: string;
-  author: string;
-  content: string;
-  plainText: string;
-}
+import { iso6393ToBCP47 } from '../utils/languageMapper';
+import { Post } from '../types';
+
+// React Native requires using require() for franc-min and accessing the correct export
+const francModule = require('franc-min');
+const franc = francModule.default || francModule.franc || francModule;
+
+// Re-export Post for convenience
+export { Post };
 
 /**
  * Strips HTML tags and decodes HTML entities from text
@@ -42,7 +43,7 @@ export function stripHtml(html: string): string {
 /**
  * Parses RSS/Atom XML string and extracts article content
  */
-export function parseRSSItem(xmlString: string): RSSItem | null {
+export function parseRSSItem(xmlString: string): Post | null {
   try {
     // Extract CDATA content using regex
     const extractCDATA = (text: string): string => {
@@ -115,13 +116,38 @@ export function parseRSSItem(xmlString: string): RSSItem | null {
     // Create plain text version for TTS
     const plainText = stripHtml(content);
 
+    // Detect language from plain text
+    let detectedLanguage: string | null = null;
+
+    if (plainText.length >= 20) {
+      try {
+        const francResult = franc(plainText, { minLength: 20 });
+
+        if (francResult !== 'und') {
+          detectedLanguage = iso6393ToBCP47(francResult);
+
+          if (detectedLanguage) {
+            console.log(`[RSSParser] Detected: ${francResult} → ${detectedLanguage}`);
+          } else {
+            console.warn(`[RSSParser] Unmapped language: ${francResult}`);
+          }
+        }
+      } catch (error) {
+        console.error('[RSSParser] Detection error:', error);
+      }
+    }
+
+    // Guaranteed language: use detected language or fallback to 'en-US'
+    const language = detectedLanguage || 'en-US';
+
     return {
       title: stripHtml(title),
       link,
       pubDate,
       author,
       content,
-      plainText
+      plainText,
+      language  // Now required, always present
     };
   } catch (error) {
     console.error('Error parsing RSS item:', error);
@@ -131,31 +157,50 @@ export function parseRSSItem(xmlString: string): RSSItem | null {
 
 /**
  * Parse multiple RSS items from feed XML (supports both RSS <item> and Atom <entry>)
+ * @param xmlString - The RSS/Atom XML string to parse
+ * @param lastReadAt - Optional ISO date string; stops parsing when encountering older posts (optimization)
  */
-export function parseRSSFeed(xmlString: string): RSSItem[] {
-  const items: RSSItem[] = [];
+export function parseRSSFeed(xmlString: string, lastReadAt?: string | null): Post[] {
+  const posts: Post[] = [];
+  const cutoffDate = lastReadAt ? new Date(lastReadAt) : null;
 
   // Try RSS format first (<item> tags)
   const itemRegex = /<item>([\s\S]*?)<\/item>/g;
   let match;
 
   while ((match = itemRegex.exec(xmlString)) !== null) {
-    const item = parseRSSItem(`<item>${match[1]}</item>`);
-    if (item) {
-      items.push(item);
+    const post = parseRSSItem(`<item>${match[1]}</item>`);
+    if (post) {
+      // Early termination: stop parsing if this post is older than cutoff
+      if (cutoffDate && post.pubDate) {
+        const postDate = new Date(post.pubDate);
+        if (postDate <= cutoffDate) {
+          console.log(`[RSSParser] Early stop: reached posts older than ${lastReadAt}`);
+          break;
+        }
+      }
+      posts.push(post);
     }
   }
 
-  // If no items found, try Atom format (<entry> tags)
-  if (items.length === 0) {
+  // If no posts found, try Atom format (<entry> tags)
+  if (posts.length === 0) {
     const entryRegex = /<entry>([\s\S]*?)<\/entry>/g;
     while ((match = entryRegex.exec(xmlString)) !== null) {
-      const item = parseRSSItem(`<entry>${match[1]}</entry>`);
-      if (item) {
-        items.push(item);
+      const post = parseRSSItem(`<entry>${match[1]}</entry>`);
+      if (post) {
+        // Early termination: stop parsing if this post is older than cutoff
+        if (cutoffDate && post.pubDate) {
+          const postDate = new Date(post.pubDate);
+          if (postDate <= cutoffDate) {
+            console.log(`[RSSParser] Early stop: reached posts older than ${lastReadAt}`);
+            break;
+          }
+        }
+        posts.push(post);
       }
     }
   }
 
-  return items;
+  return posts;
 }

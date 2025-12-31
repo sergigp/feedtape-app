@@ -25,6 +25,7 @@
     "expo-speech": "~13.0.1",
     "expo-status-bar": "~3.0.8",
     "expo-web-browser": "^15.0.8",
+    "franc-min": "^6.2.0",
     "react": "19.1.0",
     "react-native": "0.81.4"
   },
