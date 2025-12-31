@@ -7,15 +7,22 @@ import {
   SafeAreaView,
   Image,
   TouchableOpacity,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { TrackItem } from './TrackItem';
 import { AudioPlayer } from './AudioPlayer';
+import { TechnicolorText } from './TechnicolorText';
+import { TechnicolorButton } from './TechnicolorButton';
 import { RSSItem } from '../services/rssParser';
 import { colors } from '../constants/colors';
 
+const { width } = Dimensions.get('window');
+
 interface TrackListProps {
   feedTitle: string;
+  feedId: string;
+  lastReadAt: string | null | undefined;
   articles: RSSItem[];
   selectedIndex: number | null;
   progressMap: { [key: number]: number };
@@ -31,6 +38,8 @@ interface TrackListProps {
 
 export const TrackList: React.FC<TrackListProps> = ({
   feedTitle,
+  feedId,
+  lastReadAt,
   articles,
   selectedIndex,
   progressMap,
@@ -43,48 +52,90 @@ export const TrackList: React.FC<TrackListProps> = ({
   onSettingsPress,
   getArticleDuration,
 }) => {
+  // Calculate new tracks count based on last_read_at
+  const newTracksCount = React.useMemo(() => {
+    if (!lastReadAt) return articles.length; // All new if never read
+
+    const lastReadDate = new Date(lastReadAt);
+    return articles.filter(article => {
+      if (!article.pubDate) return true; // Include if no pubDate
+      const articleDate = new Date(article.pubDate);
+      return articleDate > lastReadDate;
+    }).length;
+  }, [articles, lastReadAt]);
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerInner}>
-          {/* Back Button */}
+        {/* Left side: Back arrow + Feed title */}
+        <View style={styles.headerLeft}>
           <TouchableOpacity
             onPress={onBack}
-            style={styles.backButton}
             testID="back-button"
           >
             <Ionicons
               name="chevron-back"
               size={24}
-              color={colors.foreground}
+              color="#8E2DE2"
             />
           </TouchableOpacity>
+          <TechnicolorText
+            text={feedTitle.toLowerCase()}
+            style={styles.feedTitleHeader}
+          />
+        </View>
 
-          {/* Logo */}
-          <Image
-            source={require('../../assets/feedtape-logo.png')}
-            style={styles.logo}
-            resizeMode="contain"
+        {/* Right side: Settings button */}
+        <TouchableOpacity onPress={onSettingsPress}>
+          <Ionicons
+            name="ellipsis-vertical"
+            size={24}
+            color={colors.foreground}
+          />
+        </TouchableOpacity>
+      </View>
+      <View style={styles.divider} />
+
+      {/* Hero Card - New Tracks */}
+      <View style={styles.cardContainer}>
+        <View style={styles.card}>
+          {/* Cassette Logo */}
+          <View style={styles.logoImageContainer}>
+            <Image
+              source={require('../../assets/feedtape-logo.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </View>
+
+          {/* New Tracks Count */}
+          <Text style={styles.cardTitle}>
+            {newTracksCount} new track{newTracksCount !== 1 ? 's' : ''}
+          </Text>
+
+          {/* Play Button */}
+          <TechnicolorButton
+            label="PLAY"
+            icon="play"
+            onPress={() => {
+              if (articles.length > 0) {
+                onTrackSelect(0);
+                onPlayPause();
+              }
+            }}
           />
 
-          {/* Settings Button */}
-          <TouchableOpacity
-            onPress={onSettingsPress}
-            style={styles.settingsButton}
-          >
-            <Ionicons
-              name="ellipsis-vertical"
-              size={20}
-              color={colors.foregroundMedium}
-            />
-          </TouchableOpacity>
+          {/* Subtitle */}
+          <Text style={styles.cardSubtitle}>
+            Listen in Headline mode
+          </Text>
         </View>
+      </View>
 
-        {/* Feed Title */}
-        <View style={styles.feedTitleContainer}>
-          <Text style={styles.feedTitle}>{feedTitle}</Text>
-        </View>
+      {/* Tracks Section Header */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>tracks</Text>
       </View>
 
       {/* Track List */}
@@ -126,50 +177,75 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: colors.backgroundWhite,
   },
-  headerInner: {
-    maxWidth: 448, // max-w-md
-    marginHorizontal: 'auto',
-    width: '100%',
+  headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32, // px-8
-    paddingVertical: 24, // py-6 (reduced from py-12)
-    position: 'relative',
+    gap: 8,
   },
-  backButton: {
-    position: 'absolute',
-    left: 32,
-    top: '50%',
-    transform: [{ translateY: -12 }],
-    padding: 8,
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
   },
-  logo: {
-    height: 48, // h-12 = 48px (smaller in track list)
-    width: 150,
+  feedTitleHeader: {
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: -0.8,
   },
-  settingsButton: {
-    position: 'absolute',
-    right: 32,
-    top: '50%',
-    transform: [{ translateY: -10 }],
-    padding: 8,
-  },
-  feedTitleContainer: {
-    paddingHorizontal: 32,
-    paddingVertical: 12,
+  // Hero Card styles
+  cardContainer: {
     alignItems: 'center',
+    marginTop: 20,
   },
-  feedTitle: {
+  card: {
+    backgroundColor: colors.cardBg,
+    width: width * 0.9,
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+    borderRadius: 2,
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  logoImageContainer: {
+    marginBottom: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoImage: {
+    width: 140,
+    height: 106,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 25,
+    color: colors.foregroundDark,
+  },
+  cardSubtitle: {
     fontSize: 14,
-    fontWeight: '600',
     color: colors.mutedForeground,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    marginTop: 12,
+  },
+  // Section header
+  sectionHeader: {
+    paddingHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.foreground,
   },
   list: {
     flex: 1,

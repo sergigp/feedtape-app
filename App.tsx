@@ -219,6 +219,8 @@ function AppContent() {
         return (
           <TrackList
             feedTitle={selectedFeed?.title || selectedFeed?.url || ''}
+            feedId={selectedFeed?.id || ''}
+            lastReadAt={selectedFeed?.last_read_at}
             articles={articles}
             selectedIndex={selectedIndex}
             progressMap={progressMap}
