@@ -56,6 +56,12 @@ class ReadStatusService {
    * Updates both in-memory cache and AsyncStorage
    */
   async markAsRead(articleLink: string, feedId?: string, title?: string): Promise<void> {
+    // Guard: ensure service is initialized before marking as read
+    if (!this.isInitialized) {
+      console.warn('[ReadStatusService] markAsRead called before initialization, waiting...');
+      await this.initialize();
+    }
+
     try {
       // Optimistic update - add to cache immediately
       this.readArticlesCache.add(articleLink);

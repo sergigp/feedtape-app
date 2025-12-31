@@ -137,46 +137,8 @@ function AppContent() {
     const post = posts[index];
     if (!post) return;
 
-    try {
-      setIsPlaying(true);
-
-      // Mark as read when starting playback
-      await readStatusService.markAsRead(
-        post.link,
-        selectedFeed?.id,
-        post.title
-      );
-
-      // Speak the post with title announcement
-      nativeTtsService.speakWithTitle(post.title, post.plainText, {
-        language: getLanguageForPost(post),
-        onDone: async () => {
-          console.log('[App] Post finished, checking for next unread post');
-          setIsPlaying(false);
-          // Find next unread post
-          const nextUnreadIndex = posts.findIndex((p, i) =>
-            i > index && !readStatusService.isRead(p.link)
-          );
-          if (nextUnreadIndex !== -1) {
-            console.log('[App] Waiting 2 seconds before next post');
-            // Wait 2 seconds before playing next post
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            console.log('[App] Auto-playing next unread post:', nextUnreadIndex);
-            selectArticle(nextUnreadIndex);
-          } else {
-            console.log('[App] No more unread posts');
-          }
-        },
-        onError: (error) => {
-          console.error('[App] TTS error:', error);
-          setIsPlaying(false);
-        },
-      });
-    } catch (error) {
-      console.error('[App] Playback error:', error);
-      Alert.alert('Playback Error', 'Failed to play audio.');
-      setIsPlaying(false);
-    }
+    // Use extracted playback helper
+    await startPlayback(post, index);
   };
 
   const getLanguageForPost = (post: Post): string => {
@@ -202,6 +164,66 @@ function AppContent() {
     return post.language;
   };
 
+  /**
+   * Start playback for a post with auto-play support
+   * Extracted to avoid code duplication between selectArticle and handlePlayPause
+   */
+  const startPlayback = async (post: Post, index: number) => {
+    try {
+      setIsPlaying(true);
+
+      // Mark as read when starting playback
+      await readStatusService.markAsRead(
+        post.link,
+        selectedFeed?.id,
+        post.title
+      );
+
+      // Speak the post with title announcement
+      nativeTtsService.speakWithTitle(post.title, post.plainText, {
+        language: getLanguageForPost(post),
+        onDone: async () => {
+          console.log('[App] Post finished, checking for next unread post');
+          setIsPlaying(false);
+
+          // Find next unread post
+          const nextUnreadIndex = posts.findIndex((p, i) =>
+            i > index && !readStatusService.isRead(p.link)
+          );
+
+          if (nextUnreadIndex !== -1) {
+            console.log('[App] Waiting 2 seconds before next post');
+            // Wait 2 seconds before playing next post
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Guard: Check if still on track list screen (fix race condition)
+            if (currentScreen !== 'trackList') {
+              console.log('[App] Screen changed, canceling auto-play');
+              return;
+            }
+
+            console.log('[App] Auto-playing next unread post:', nextUnreadIndex);
+            // Handle errors from auto-play (fix unhandled promise)
+            selectArticle(nextUnreadIndex).catch(error => {
+              console.error('[App] Auto-play error:', error);
+              setIsPlaying(false);
+            });
+          } else {
+            console.log('[App] No more unread posts');
+          }
+        },
+        onError: (error) => {
+          console.error('[App] TTS error:', error);
+          setIsPlaying(false);
+        },
+      });
+    } catch (error) {
+      console.error('[App] Playback error:', error);
+      Alert.alert('Playback Error', 'Failed to play audio.');
+      setIsPlaying(false);
+    }
+  };
+
   const handlePlayPause = async () => {
     if (selectedIndex === null) return;
 
@@ -216,41 +238,8 @@ function AppContent() {
         await nativeTtsService.stop();
         setIsPlaying(false);
       } else {
-        // Play using native TTS
-        setIsPlaying(true);
-
-        // Mark as read when starting playback
-        await readStatusService.markAsRead(
-          post.link,
-          selectedFeed?.id,
-          post.title
-        );
-
-        // Speak the post with title announcement
-        nativeTtsService.speakWithTitle(post.title, post.plainText, {
-          language: getLanguageForPost(post),
-          onDone: async () => {
-            console.log('[App] Post finished, checking for next unread post');
-            setIsPlaying(false);
-            // Find next unread post
-            const nextUnreadIndex = posts.findIndex((p, i) =>
-              i > selectedIndex && !readStatusService.isRead(p.link)
-            );
-            if (nextUnreadIndex !== -1) {
-              console.log('[App] Waiting 2 seconds before next post');
-              // Wait 2 seconds before playing next post
-              await new Promise(resolve => setTimeout(resolve, 2000));
-              console.log('[App] Auto-playing next unread post:', nextUnreadIndex);
-              selectArticle(nextUnreadIndex);
-            } else {
-              console.log('[App] No more unread posts');
-            }
-          },
-          onError: (error) => {
-            console.error('[App] TTS error:', error);
-            setIsPlaying(false);
-          },
-        });
+        // Play using extracted playback helper
+        await startPlayback(post, selectedIndex);
       }
     } catch (error) {
       console.error('[App] Playback error:', error);
