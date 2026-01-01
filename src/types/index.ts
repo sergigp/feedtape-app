@@ -41,7 +41,9 @@ export interface Feed {
   url: string;
   title?: string;
   created_at?: string;
-  last_read_at?: string | null;
+  // last_read_at removed - backend no longer returns this field
+  // Read/unread tracking now handled client-side via ReadStatusService
+  posts?: Post[];  // Feed optionally contains its posts
 }
 
 export interface FeedStats {
@@ -55,10 +57,38 @@ export interface ApiError {
   message: string;
 }
 
-export interface TtsRequest {
-  text: string;
-  language?: 'auto' | 'es' | 'en' | 'fr' | 'de' | 'pt' | 'it';
-  voice?: string;
-  speed?: number;
-  quality?: 'standard' | 'neural';
+// Post Type - Individual feed item with enriched metadata
+export interface Post {
+  title: string;
+  link: string;
+  pubDate: string;
+  author: string;
+  content: string;       // Raw HTML content
+  plainText: string;     // Clean text for TTS
+  language: string;      // BCP-47 code, always present, guaranteed 'en-US' minimum
+
+  // Future AI enrichments (not implemented yet):
+  // summary?: string;
+  // headline?: string;
+  // readingTime?: number;
+  // sentiment?: 'positive' | 'negative' | 'neutral';
+}
+
+// Read Status Tracking Types
+
+export interface ReadArticleInfo {
+  readAt: string;       // ISO timestamp when marked as read
+  feedId?: string;      // Optional feed tracking for analytics
+  title?: string;       // Optional article title for debugging
+}
+
+export interface ReadStatusData {
+  articles: {
+    [articleLink: string]: ReadArticleInfo;
+  };
+  metadata: {
+    lastCleanup: string;  // ISO timestamp of last cleanup run
+    version: number;       // Schema version for future migrations
+    totalEntries: number;  // Count of tracked articles
+  };
 }

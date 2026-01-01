@@ -14,16 +14,15 @@ import { TrackItem } from './TrackItem';
 import { AudioPlayer } from './AudioPlayer';
 import { TechnicolorText } from './TechnicolorText';
 import { TechnicolorButton } from './TechnicolorButton';
-import { RSSItem } from '../services/rssParser';
+import { Post } from '../types';
 import { colors } from '../constants/colors';
+import readStatusService from '../services/readStatusService';
 
 const { width } = Dimensions.get('window');
 
 interface TrackListProps {
   feedTitle: string;
-  feedId: string;
-  lastReadAt: string | null | undefined;
-  articles: RSSItem[];
+  posts: Post[];
   selectedIndex: number | null;
   progressMap: { [key: number]: number };
   isPlaying: boolean;
@@ -33,14 +32,12 @@ interface TrackListProps {
   onSkipForward: () => void;
   onBack: () => void;
   onSettingsPress: () => void;
-  getArticleDuration: (article: RSSItem) => string;
+  getPostDuration: (post: Post) => string;
 }
 
 export const TrackList: React.FC<TrackListProps> = ({
   feedTitle,
-  feedId,
-  lastReadAt,
-  articles,
+  posts,
   selectedIndex,
   progressMap,
   isPlaying,
@@ -50,19 +47,12 @@ export const TrackList: React.FC<TrackListProps> = ({
   onSkipForward,
   onBack,
   onSettingsPress,
-  getArticleDuration,
+  getPostDuration,
 }) => {
-  // Calculate new tracks count based on last_read_at
+  // Calculate new tracks count based on read status
   const newTracksCount = React.useMemo(() => {
-    if (!lastReadAt) return articles.length; // All new if never read
-
-    const lastReadDate = new Date(lastReadAt);
-    return articles.filter(article => {
-      if (!article.pubDate) return true; // Include if no pubDate
-      const articleDate = new Date(article.pubDate);
-      return articleDate > lastReadDate;
-    }).length;
-  }, [articles, lastReadAt]);
+    return posts.filter(post => !readStatusService.isRead(post.link)).length;
+  }, [posts]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -119,7 +109,7 @@ export const TrackList: React.FC<TrackListProps> = ({
             label="PLAY"
             icon="play"
             onPress={() => {
-              if (articles.length > 0) {
+              if (posts.length > 0) {
                 onTrackSelect(0);
                 onPlayPause();
               }
@@ -140,13 +130,15 @@ export const TrackList: React.FC<TrackListProps> = ({
 
       {/* Track List */}
       <FlatList
-        data={articles}
+        data={posts}
         keyExtractor={(item, index) => index.toString()}
         renderItem={({ item, index }) => (
           <TrackItem
             title={item.title}
-            duration={getArticleDuration(item)}
+            duration={getPostDuration(item)}
             isActive={selectedIndex === index}
+            isPlaying={isPlaying && selectedIndex === index}
+            isRead={readStatusService.isRead(item.link)}
             progress={progressMap[index] || 0}
             onPress={() => onTrackSelect(index)}
           />
@@ -159,11 +151,12 @@ export const TrackList: React.FC<TrackListProps> = ({
       <AudioPlayer
         currentTrack={
           selectedIndex !== null
-            ? { title: articles[selectedIndex].title }
+            ? { title: posts[selectedIndex].title }
             : undefined
         }
         isPlaying={isPlaying}
         isLoading={isLoading}
+        duration={selectedIndex !== null ? getPostDuration(posts[selectedIndex]) : '0:00'}
         onPlayPause={onPlayPause}
         onSkipForward={onSkipForward}
       />

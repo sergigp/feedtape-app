@@ -22,6 +22,7 @@ import { Feed, FeedStats } from "../types";
 import feedService from "../services/feedService";
 import { parseRSSFeed } from "../services/rssParser";
 import nativeTtsService from "../services/nativeTtsService";
+import readStatusService from "../services/readStatusService";
 
 const { width } = Dimensions.get("window");
 
@@ -53,25 +54,22 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
     const results = await Promise.allSettled(
       feedsToLoad.map(async (feed) => {
         const xmlContent = await feedService.fetchRSSContent(feed.url);
-        const articles = parseRSSFeed(xmlContent);
+        // Parse RSS feed (filters articles older than 90 days)
+        const posts = parseRSSFeed(xmlContent);
 
-        // Filter unread articles based on last_read_at
-        const lastReadAt = feed.last_read_at ? new Date(feed.last_read_at) : null;
-        const unreadArticles = articles.filter((article) => {
-          if (!lastReadAt) return true; // All unread if never read
-          if (!article.pubDate) return true; // Include if no pubDate
-          const articleDate = new Date(article.pubDate);
-          return articleDate > lastReadAt;
+        // Filter unread posts using read status service
+        const unreadPosts = posts.filter((post) => {
+          return !readStatusService.isRead(post.link);
         });
 
-        // Calculate total duration for unread articles
-        const totalDuration = unreadArticles.reduce((sum, article) => {
-          return sum + nativeTtsService.estimateDuration(article.plainText);
+        // Calculate total duration for unread posts
+        const totalDuration = unreadPosts.reduce((sum, post) => {
+          return sum + nativeTtsService.estimateDuration(post.plainText);
         }, 0);
 
         return {
           feedId: feed.id,
-          unreadCount: unreadArticles.length,
+          unreadCount: unreadPosts.length,
           totalDuration,
         };
       })
