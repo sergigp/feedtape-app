@@ -330,3 +330,184 @@ To test Iteration 1, the following manual steps are required:
 6. Verify playback completes and logs "Playback finished"
 
 **Next Iteration:** Iteration 3 - Complete nativeTtsService API Compatibility
+
+---
+
+## Iteration 3: Complete nativeTtsService API Compatibility
+
+**Status:** Completed
+**Date:** 2026-01-02
+
+### What Was Implemented
+
+1. **Added SpeakOptions Interface**
+   - Exported `SpeakOptions` interface matching nativeTtsService
+   - Supports: `language`, `rate`, `pitch`, `voice`, `onStart`, `onDone`, `onError`
+   - Note: `pitch` and `voice` are not used by Sherpa ONNX (documented in comments)
+
+2. **Implemented speak() Method**
+   - Primary API for speaking text with full options support
+   - Auto-initializes service if not initialized
+   - Automatically switches language based on `options.language`
+   - Parses BCP-47 language codes (`en-US` → `en`, `es-ES` → `es`)
+   - Generates WAV file using configured speed (`options.rate`)
+   - Plays audio automatically with expo-av
+   - Fires callbacks at appropriate lifecycle events
+
+3. **Implemented speakWithTitle() Method**
+   - Concatenates title and content with `\n\n` separator
+   - Delegates to `speak()` method (simpler approach for spike)
+   - Maintains same callback support as `speak()`
+
+4. **Added State Management**
+   - `currentText: string | null` - tracks text being spoken
+   - `speaking: boolean` - tracks speaking state
+   - `currentCallbacks: { onStart?, onDone?, onError? }` - stores callbacks for playback events
+   - State properly cleared on stop/completion
+
+5. **Implemented Callback Support**
+   - `onStart()` - fired when audio playback begins (in `playInternal()`)
+   - `onDone()` - fired when playback completes naturally (in `onPlaybackStatusUpdate()`)
+   - `onError(error)` - fired on generation or playback errors
+   - Callbacks properly invoked during pause/resume/stop state changes
+
+6. **Added API Compatibility Methods**
+   - `isSpeaking(): Promise<boolean>` - returns speaking state
+   - `getState()` - returns `{ isSpeaking, currentText }`
+   - `getAvailableVoices()` - returns hardcoded list of Sherpa voices (en/es)
+   - `estimateDuration(text)` - calculates duration using 15 chars/second
+   - `formatDuration(seconds)` - formats as MM:SS
+
+7. **Enhanced pause/resume/stop Methods**
+   - Updated to properly manage `speaking` state alongside `isPlaying`
+   - `pause()` sets `speaking = false`
+   - `resume()` sets `speaking = true`
+   - `stop()` clears `speaking`, `currentText`, and sound instance
+
+8. **Added Language Parsing Helper**
+   - `parseLanguage(language?)` - converts BCP-47 codes to internal format
+   - Handles `en-US` → `en`, `es-ES` → `es`
+   - Defaults to `'en'` if not specified
+
+9. **Updated Test Screen**
+   - Changed test buttons to use new `speak()` and `speakWithTitle()` APIs
+   - Added callback logging to verify onStart/onDone/onError events
+   - Removed low-level generate/play methods from UI
+   - Simplified button states based on `isPlaying`
+
+### Key Technical Decisions
+
+1. **Auto-Initialization**
+   - `speak()` auto-initializes service if not initialized
+   - Allows drop-in replacement without explicit initialization calls
+   - Language extracted from `options.language` parameter
+
+2. **Title + Content Concatenation**
+   - Simpler approach than two separate TTS calls
+   - No 2-second pause (acceptable for spike)
+   - Reduces complexity and generation time
+
+3. **Private playInternal() Method**
+   - Renamed `play()` to `playInternal()` for internal use
+   - Public API uses `speak()` instead
+   - Maintains expo-av playback implementation
+
+4. **Hardcoded Voice List**
+   - Sherpa ONNX doesn't provide voice enumeration
+   - `getAvailableVoices()` returns static list for compatibility
+   - Actual voice determined by initialized language model
+
+### Test Flow
+
+**Manual Testing Required:**
+
+1. **Test speak() API:**
+   - Tap "Initialize" (optional - speak() auto-initializes)
+   - Tap "Test speak()"
+   - Verify logs show: generation → onStart callback → playback
+   - Verify audio plays through device speakers
+   - Verify onDone callback fires when playback completes
+
+2. **Test speakWithTitle() API:**
+   - Tap "Test speakWithTitle()"
+   - Verify title is spoken first, followed by content
+   - Verify callbacks fire correctly
+
+3. **Test Pause/Resume:**
+   - While audio is playing, tap "Pause"
+   - Verify audio pauses and button shows "Resume"
+   - Tap "Resume"
+   - Verify playback continues
+
+4. **Test Stop:**
+   - While audio is playing, tap "Stop"
+   - Verify audio stops immediately
+   - Verify speaking state cleared
+
+5. **Test State Methods:**
+   - Call `isSpeaking()` during playback → should return `true`
+   - Call `getState()` → should return current text and speaking status
+   - Call `getAvailableVoices()` → should return en/es voices
+
+### Files Modified/Created
+
+**Modified Files:**
+- `src/services/sherpaOnnxService.ts` (added ~100 lines for API compatibility)
+  - Added `SpeakOptions` interface
+  - Added `speak()`, `speakWithTitle()` methods
+  - Added `isSpeaking()`, `getState()`, `getAvailableVoices()`
+  - Added `estimateDuration()`, `formatDuration()`
+  - Added `parseLanguage()` helper
+  - Enhanced state management with callbacks
+- `src/components/SherpaTestScreen.tsx` (updated test UI)
+  - Changed buttons to test new API methods
+  - Added callback logging
+  - Simplified state management
+
+### Iteration Completion Criteria
+
+- ✅ `speak(text, options)` method implemented with callbacks
+- ✅ `speakWithTitle(title, content, options)` method implemented
+- ✅ `isSpeaking()` method implemented
+- ✅ `getState()` method implemented
+- ✅ `getAvailableVoices()` method implemented (hardcoded list)
+- ✅ `estimateDuration()` and `formatDuration()` methods implemented
+- ✅ Callback support (onStart, onDone, onError) fully functional
+- ✅ State management tracking `currentText` and `speaking`
+- ✅ TypeScript compilation successful
+- ⏳ **Manual testing required** - verify all methods work on device
+
+### API Compatibility Summary
+
+The sherpaOnnxService now implements the complete nativeTtsService API:
+
+| Method | Status | Notes |
+|--------|--------|-------|
+| `speak(text, options)` | ✅ Implemented | Auto-initializes, supports callbacks |
+| `speakWithTitle(title, content, options)` | ✅ Implemented | Concatenates with `\n\n` |
+| `stop()` | ✅ Implemented | Clears state and unloads sound |
+| `pause()` | ✅ Implemented | Uses expo-av pauseAsync |
+| `resume()` | ✅ Implemented | Uses expo-av playAsync |
+| `isSpeaking()` | ✅ Implemented | Returns speaking state |
+| `getState()` | ✅ Implemented | Returns `{ isSpeaking, currentText }` |
+| `getAvailableVoices()` | ✅ Implemented | Hardcoded en/es voices |
+| `estimateDuration(text)` | ✅ Implemented | 15 chars/second calculation |
+| `formatDuration(seconds)` | ✅ Implemented | MM:SS format |
+
+### Known Limitations
+
+- **Foreground playback only** - background audio not enabled yet (Iteration 4)
+- **No lock screen controls** - will be added in Iteration 4
+- **English only** - Spanish model not bundled yet (Iteration 5)
+- **No 2-second pause** between title and content (concatenation approach)
+- **pitch and voice options ignored** - Sherpa ONNX limitations
+
+### Next Steps
+
+**Manual Testing Required:**
+1. Run app on iOS device
+2. Test all methods via updated test screen
+3. Verify callbacks fire correctly
+4. Verify audio quality and playback controls
+
+**Next Iteration:** Iteration 4 - iOS Background Audio & Lock Screen Controls

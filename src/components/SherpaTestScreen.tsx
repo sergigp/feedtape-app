@@ -5,7 +5,6 @@ import sherpaOnnxService from '../services/sherpaOnnxService';
 export function SherpaTestScreen() {
   const [logs, setLogs] = useState<string[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [currentWavPath, setCurrentWavPath] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
   const addLog = (message: string) => {
@@ -27,49 +26,64 @@ export function SherpaTestScreen() {
   };
 
   const handleGenerateAndPlay = async () => {
-    if (!isInitialized) {
-      Alert.alert('Error', 'Please initialize first');
-      return;
-    }
-
     try {
       const testText = `BlackBerry will never die, not so long as the legion of Dr. Frankensteins keeps trying to bring it back with a new name. Ahead of CES 2026, the Clicks keyboard case has returned, and after several years of iterations, the accessory may finally make sense for folks who hate typing on touchscreens. Instead of layering a massive keyboard beard hanging off the bottom of your phone, the new Power Keyboard is now a power bank that attaches with MagSafe. To keep it more contained, the keyboard slides into your awaiting palm like an old-school Nokia Sidekick.
 
 The Power Keyboard—made by Clicks, which is fronted by YouTuber Michael Fisher, aka MrMobile—is basically a slide-out keyboard built into a 2,150 mAh battery. It's compatible with MagSafe and Qi2 for iPhones and Android phones. Instead of physically connecting to your phone's USB-C port like past versions, the Power Keyboard will depend on your device's Bluetooth connection.`;
-      addLog(`Generating WAV file (${testText.length} chars)...`);
+      addLog(`Testing speak() API (${testText.length} chars)...`);
 
-      // Generate WAV file
-      const wavPath = await sherpaOnnxService.generate(testText);
-      setCurrentWavPath(wavPath);
-      addLog(`✓ WAV file generated`);
+      // Use the new speak() API with callbacks
+      await sherpaOnnxService.speak(testText, {
+        language: 'en-US',
+        rate: 1.0,
+        onStart: () => {
+          addLog('✓ onStart callback fired');
+          setIsPlaying(true);
+        },
+        onDone: () => {
+          addLog('✓ onDone callback fired');
+          setIsPlaying(false);
+        },
+        onError: (error) => {
+          addLog(`✗ onError callback fired: ${error.message}`);
+          setIsPlaying(false);
+        },
+      });
 
-      // Try to play with expo-av for full control
-      addLog('Attempting playback with expo-av...');
-      await sherpaOnnxService.play(wavPath);
-      setIsPlaying(true);
-
-      addLog('✓ Playback started with expo-av');
+      addLog('✓ speak() call completed');
     } catch (error) {
       addLog(`✗ Failed: ${error}`);
       Alert.alert('Error', `Failed: ${error}`);
     }
   };
 
-  const handleNativePlay = async () => {
-    if (!isInitialized) {
-      Alert.alert('Error', 'Please initialize first');
-      return;
-    }
-
+  const handleSpeakWithTitle = async () => {
     try {
-      const testText = `BlackBerry will never die, not so long as the legion of Dr. Frankensteins keeps trying to bring it back with a new name. Ahead of CES 2026, the Clicks keyboard case has returned, and after several years of iterations, the accessory may finally make sense for folks who hate typing on touchscreens. Instead of layering a massive keyboard beard hanging off the bottom of your phone, the new Power Keyboard is now a power bank that attaches with MagSafe. To keep it more contained, the keyboard slides into your awaiting palm like an old-school Nokia Sidekick.
+      const title = 'Clicks Power Keyboard Returns';
+      const content = `BlackBerry will never die, not so long as the legion of Dr. Frankensteins keeps trying to bring it back with a new name. Ahead of CES 2026, the Clicks keyboard case has returned, and after several years of iterations, the accessory may finally make sense for folks who hate typing on touchscreens. Instead of layering a massive keyboard beard hanging off the bottom of your phone, the new Power Keyboard is now a power bank that attaches with MagSafe. To keep it more contained, the keyboard slides into your awaiting palm like an old-school Nokia Sidekick.`;
 
-The Power Keyboard—made by Clicks, which is fronted by YouTuber Michael Fisher, aka MrMobile—is basically a slide-out keyboard built into a 2,150 mAh battery. It's compatible with MagSafe and Qi2 for iPhones and Android phones. Instead of physically connecting to your phone's USB-C port like past versions, the Power Keyboard will depend on your device's Bluetooth connection.`;
-      addLog(`Using native playback (${testText.length} chars)...`);
+      addLog(`Testing speakWithTitle() API...`);
+      addLog(`Title: "${title}"`);
+      addLog(`Content: ${content.length} chars`);
 
-      // Use native generateAndPlay (no pause/resume control)
-      await sherpaOnnxService.generateAndPlay(testText);
-      addLog('✓ Native playback completed');
+      // Use speakWithTitle API
+      await sherpaOnnxService.speakWithTitle(title, content, {
+        language: 'en-US',
+        onStart: () => {
+          addLog('✓ onStart callback fired');
+          setIsPlaying(true);
+        },
+        onDone: () => {
+          addLog('✓ onDone callback fired');
+          setIsPlaying(false);
+        },
+        onError: (error) => {
+          addLog(`✗ onError callback fired: ${error.message}`);
+          setIsPlaying(false);
+        },
+      });
+
+      addLog('✓ speakWithTitle() call completed');
     } catch (error) {
       addLog(`✗ Failed: ${error}`);
       Alert.alert('Error', `Failed: ${error}`);
@@ -113,17 +127,17 @@ The Power Keyboard—made by Clicks, which is fronted by YouTuber Michael Fisher
       <View style={styles.buttonContainer}>
         <Button title="Initialize" onPress={handleInitialize} disabled={isInitialized} />
         <View style={styles.spacer} />
-        <Button title="Generate & Play (expo-av)" onPress={handleGenerateAndPlay} disabled={!isInitialized} />
+        <Button title="Test speak()" onPress={handleGenerateAndPlay} />
         <View style={styles.spacer} />
-        <Button title="Native Play (no controls)" onPress={handleNativePlay} disabled={!isInitialized} />
+        <Button title="Test speakWithTitle()" onPress={handleSpeakWithTitle} />
         <View style={styles.spacer} />
         <Button
           title={isPlaying ? 'Pause' : 'Resume'}
           onPress={handlePause}
-          disabled={!currentWavPath}
+          disabled={!isPlaying}
         />
         <View style={styles.spacer} />
-        <Button title="Stop" onPress={handleStop} disabled={!currentWavPath} />
+        <Button title="Stop" onPress={handleStop} disabled={!isPlaying} />
         <View style={styles.spacer} />
         <Button title="Clear Logs" onPress={handleClearLogs} />
       </View>

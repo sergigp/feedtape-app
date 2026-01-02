@@ -2,11 +2,28 @@ import TTSManager from 'react-native-sherpa-onnx-offline-tts';
 import { Platform } from 'react-native';
 import { Audio } from 'expo-av';
 
+export interface SpeakOptions {
+  language?: string;  // e.g., 'es-ES', 'en-US'
+  rate?: number;      // Speed (0.5 to 2.0, default 1.0)
+  pitch?: number;     // Not used (Sherpa ONNX doesn't support pitch)
+  voice?: string;     // Not used (speakerId hardcoded to 0)
+  onStart?: () => void;
+  onDone?: () => void;
+  onError?: (error: Error) => void;
+}
+
 class SherpaOnnxService {
   private initialized: boolean = false;
   private currentLanguage: 'en' | 'es' | null = null;
   private sound: Audio.Sound | null = null;
   private isPlaying: boolean = false;
+  private currentText: string | null = null;
+  private speaking: boolean = false;
+  private currentCallbacks: {
+    onStart?: () => void;
+    onDone?: () => void;
+    onError?: (error: Error) => void;
+  } = {};
 
   async initialize(language: 'en' | 'es' = 'en'): Promise<void> {
     const startTime = Date.now();
@@ -39,7 +56,56 @@ class SherpaOnnxService {
     }
   }
 
-  async generate(text: string, speakerId: number = 0, speed: number = 1.0): Promise<string> {
+  async speak(text: string, options?: SpeakOptions): Promise<void> {
+    // Auto-initialize if needed
+    if (!this.initialized) {
+      const language = this.parseLanguage(options?.language);
+      await this.initialize(language);
+    }
+
+    // Stop any current speech
+    await this.stop();
+
+    console.log('[SherpaONNX] Speaking text with length:', text.length);
+
+    this.currentText = text;
+    this.speaking = true;
+    this.currentCallbacks = {
+      onStart: options?.onStart,
+      onDone: options?.onDone,
+      onError: options?.onError,
+    };
+
+    try {
+      // Switch language if needed
+      const targetLanguage = this.parseLanguage(options?.language);
+      if (targetLanguage !== this.currentLanguage) {
+        await this.switchLanguage(targetLanguage);
+      }
+
+      // Generate WAV file
+      const speed = options?.rate ?? 1.0;
+      const wavFilePath = await this.generate(text, 0, speed);
+
+      // Play the WAV file
+      await this.playInternal(wavFilePath);
+    } catch (error) {
+      console.error('[SherpaONNX] Speak failed:', error);
+      this.speaking = false;
+      this.currentText = null;
+      this.currentCallbacks.onError?.(error as Error);
+      throw error;
+    }
+  }
+
+  async speakWithTitle(title: string, content: string, options?: SpeakOptions): Promise<void> {
+    // Concatenate title and content with newlines (simpler approach for spike)
+    const fullText = `${title}\n\n${content}`;
+    console.log('[SherpaONNX] Speaking with title:', title);
+    await this.speak(fullText, options);
+  }
+
+  private async generate(text: string, speakerId: number = 0, speed: number = 1.0): Promise<string> {
     if (!this.initialized) {
       throw new Error('SherpaOnnxService not initialized. Call initialize() first.');
     }
@@ -63,6 +129,16 @@ class SherpaOnnxService {
       console.error('[SherpaONNX] Generation failed:', error);
       throw error;
     }
+  }
+
+  private parseLanguage(language?: string): 'en' | 'es' {
+    if (!language) return 'en';
+
+    // Parse BCP-47 language codes (en-US -> en, es-ES -> es)
+    const langCode = language.toLowerCase().split('-')[0];
+
+    if (langCode === 'es') return 'es';
+    return 'en'; // Default to English
   }
 
   async generateAndPlay(text: string, speakerId: number = 0, speed: number = 1.0): Promise<void> {
@@ -89,14 +165,11 @@ class SherpaOnnxService {
     }
   }
 
-  async play(wavFilePath: string): Promise<void> {
+  private async playInternal(wavFilePath: string): Promise<void> {
     console.log('[SherpaONNX] Starting playback...');
     console.log(`[SherpaONNX] WAV file: ${wavFilePath}`);
 
     try {
-      // Stop any currently playing sound
-      await this.stop();
-
       // Configure audio mode for playback
       console.log('[SherpaONNX] Configuring audio session...');
       await Audio.setAudioModeAsync({
@@ -126,6 +199,9 @@ class SherpaOnnxService {
       this.isPlaying = true;
 
       console.log('[SherpaONNX] Playback started');
+
+      // Fire onStart callback
+      this.currentCallbacks.onStart?.();
     } catch (error) {
       console.error('[SherpaONNX] Playback failed:', error);
       console.error('[SherpaONNX] Error details:', JSON.stringify(error));
@@ -142,6 +218,7 @@ class SherpaOnnxService {
     try {
       await this.sound.pauseAsync();
       this.isPlaying = false;
+      this.speaking = false;
       console.log('[SherpaONNX] Playback paused');
     } catch (error) {
       console.error('[SherpaONNX] Pause failed:', error);
@@ -158,6 +235,7 @@ class SherpaOnnxService {
     try {
       await this.sound.playAsync();
       this.isPlaying = true;
+      this.speaking = true;
       console.log('[SherpaONNX] Playback resumed');
     } catch (error) {
       console.error('[SherpaONNX] Resume failed:', error);
@@ -167,6 +245,8 @@ class SherpaOnnxService {
 
   async stop(): Promise<void> {
     if (!this.sound) {
+      this.speaking = false;
+      this.currentText = null;
       return;
     }
 
@@ -175,6 +255,8 @@ class SherpaOnnxService {
       await this.sound.unloadAsync();
       this.sound = null;
       this.isPlaying = false;
+      this.speaking = false;
+      this.currentText = null;
       console.log('[SherpaONNX] Playback stopped');
     } catch (error) {
       console.error('[SherpaONNX] Stop failed:', error);
@@ -189,8 +271,53 @@ class SherpaOnnxService {
       if (status.didJustFinish) {
         console.log('[SherpaONNX] Playback finished');
         this.isPlaying = false;
+        this.speaking = false;
+        this.currentText = null;
+
+        // Fire onDone callback
+        this.currentCallbacks.onDone?.();
       }
     }
+  }
+
+  async isSpeaking(): Promise<boolean> {
+    return this.speaking;
+  }
+
+  async getState() {
+    return {
+      isSpeaking: this.speaking,
+      currentText: this.currentText,
+    };
+  }
+
+  async getAvailableVoices(): Promise<any[]> {
+    // Sherpa ONNX doesn't provide voice enumeration API
+    // Return hardcoded list for compatibility
+    return [
+      {
+        identifier: 'sherpa-onnx-en',
+        name: 'Sherpa ONNX English',
+        language: 'en-US',
+      },
+      {
+        identifier: 'sherpa-onnx-es',
+        name: 'Sherpa ONNX Spanish',
+        language: 'es-ES',
+      },
+    ];
+  }
+
+  estimateDuration(text: string): number {
+    // Average speech rate: ~15 characters per second for natural TTS
+    const CHARS_PER_SECOND = 15;
+    return Math.ceil(text.length / CHARS_PER_SECOND);
+  }
+
+  formatDuration(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
   getPlaybackStatus(): { isPlaying: boolean; hasSound: boolean } {
