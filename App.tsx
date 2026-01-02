@@ -12,6 +12,7 @@ import { SplashScreen } from './src/components/SplashScreen';
 import { FeedList } from './src/components/FeedList';
 import { TrackList } from './src/components/TrackList';
 import { SettingsScreen } from './src/components/SettingsScreen';
+import { SherpaTestScreen } from './src/components/SherpaTestScreen';
 import { parseRSSFeed, Post } from './src/services/rssParser';
 import nativeTtsService from './src/services/nativeTtsService';
 import feedService from './src/services/feedService';
@@ -20,6 +21,9 @@ import { colors } from './src/constants/colors';
 import { Feed } from './src/types';
 
 type Screen = 'splash' | 'feedList' | 'trackList' | 'settings';
+
+// TEMPORARY: Set to true to test Sherpa ONNX (Iteration 1)
+const ENABLE_SHERPA_TEST = true;
 
 function AppContent() {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
@@ -266,6 +270,11 @@ function AppContent() {
 
   // Render current screen
   const renderScreen = () => {
+    // TEMPORARY: Show Sherpa test screen for Iteration 1 testing
+    if (ENABLE_SHERPA_TEST) {
+      return <SherpaTestScreen />;
+    }
+
     // Show loading while checking authentication
     if (authLoading) {
       return (

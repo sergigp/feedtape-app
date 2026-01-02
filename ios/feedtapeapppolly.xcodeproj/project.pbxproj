@@ -3,13 +3,14 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 54;
+	objectVersion = 60;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
 		50B68C825B3AB8AAAD04EBA8 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0F530FF6ADD09841C6429E /* ExpoModulesProvider.swift */; };
+		9A086F5A2F084A9700CD4AA5 /* models in Resources */ = {isa = PBXBuildFile; fileRef = 9A086F592F084A9600CD4AA5 /* models */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		C51DB23CF855CC8EB5E409C4 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E57A7461D0D07F308994EB45 /* PrivacyInfo.xcprivacy */; };
 		EFF6FB19DA42061FBEC2F8B0 /* libPods-feedtapeapppolly.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 041474D7B8DFD6C92433A56C /* libPods-feedtapeapppolly.a */; };
@@ -18,13 +19,14 @@
 
 /* Begin PBXFileReference section */
 		041474D7B8DFD6C92433A56C /* libPods-feedtapeapppolly.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-feedtapeapppolly.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		13B07F961A680F5B00A75B9A /* feedtapeapppolly.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = feedtapeapppolly.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		13B07F961A680F5B00A75B9A /* FeedTape.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FeedTape.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = feedtapeapppolly/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = feedtapeapppolly/Info.plist; sourceTree = "<group>"; };
+		9A086F592F084A9600CD4AA5 /* models */ = {isa = PBXFileReference; lastKnownFileType = folder; name = models; path = feedtapeapppolly/models; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = feedtapeapppolly/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
 		C83DE1B89FD806D67E53FFAD /* Pods-feedtapeapppolly.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-feedtapeapppolly.debug.xcconfig"; path = "Target Support Files/Pods-feedtapeapppolly/Pods-feedtapeapppolly.debug.xcconfig"; sourceTree = "<group>"; };
-		E57A7461D0D07F308994EB45 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = feedtapeapppolly/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		E57A7461D0D07F308994EB45 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = feedtapeapppolly/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		E8473F63DE8333084338D983 /* Pods-feedtapeapppolly.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-feedtapeapppolly.release.xcconfig"; path = "Target Support Files/Pods-feedtapeapppolly/Pods-feedtapeapppolly.release.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = feedtapeapppolly/AppDelegate.swift; sourceTree = "<group>"; };
@@ -77,6 +79,7 @@
 		83CBB9F61A601CBA00E9B192 = {
 			isa = PBXGroup;
 			children = (
+				9A086F592F084A9600CD4AA5 /* models */,
 				13B07FAE1A68108700A75B9A /* feedtapeapppolly */,
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
@@ -92,7 +95,7 @@
 		83CBBA001A601CBA00E9B192 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				13B07F961A680F5B00A75B9A /* feedtapeapppolly.app */,
+				13B07F961A680F5B00A75B9A /* FeedTape.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -111,7 +114,6 @@
 				C83DE1B89FD806D67E53FFAD /* Pods-feedtapeapppolly.debug.xcconfig */,
 				E8473F63DE8333084338D983 /* Pods-feedtapeapppolly.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -154,7 +156,7 @@
 			);
 			name = feedtapeapppolly;
 			productName = feedtapeapppolly;
-			productReference = 13B07F961A680F5B00A75B9A /* feedtapeapppolly.app */;
+			productReference = 13B07F961A680F5B00A75B9A /* FeedTape.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -193,6 +195,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9A086F5A2F084A9700CD4AA5 /* models in Resources */,
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,

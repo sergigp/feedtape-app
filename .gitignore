@@ -60,3 +60,7 @@ Thumbs.db
 
 # mobile
 android
+
+# Sherpa ONNX model files (too large for git)
+ios/models/
+ios/feedtapeapppolly/models/
