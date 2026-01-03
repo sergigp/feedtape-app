@@ -5,6 +5,8 @@ import {
   View,
   Alert,
   ActivityIndicator,
+  NativeEventEmitter,
+  NativeModules,
 } from 'react-native';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { LoginScreen } from './src/components/LoginScreen';
@@ -45,8 +47,23 @@ function AppContent() {
       console.error('[App] Failed to initialize read status:', error);
     });
 
+    // Add volume listener to suppress VolumeUpdate warnings
+    let volumeSubscription: any = null;
+    try {
+      const TTSManager = NativeModules.TTSManager;
+      if (TTSManager) {
+        const eventEmitter = new NativeEventEmitter(TTSManager);
+        volumeSubscription = eventEmitter.addListener('VolumeUpdate', () => {
+          // No-op listener to suppress warnings
+        });
+      }
+    } catch (e) {
+      // Ignore if event emitter setup fails
+    }
+
     return () => {
       sherpaOnnxService.stop();
+      volumeSubscription?.remove();
     };
   }, []);
 
@@ -74,7 +91,6 @@ function AppContent() {
 
   // Navigation handlers
   const handleFeedSelect = async (feed: Feed) => {
-    console.log(`[App] Feed selected: ${feed.title}, fetching RSS content`);
     setSelectedFeed(feed);
     setIsLoading(true);
 
@@ -115,8 +131,6 @@ function AppContent() {
 
   // Track selection and playback handlers
   const selectArticle = async (index: number) => {
-    console.log(`[App] Track selected: ${index}`);
-
     // If clicking on the currently selected track, toggle play/pause
     if (selectedIndex === index) {
       await handlePlayPause();
@@ -281,8 +295,6 @@ function AppContent() {
     }
 
     // Show app screens if authenticated
-    console.log(`[App] Rendering screen: ${currentScreen}`);
-
     switch (currentScreen) {
       case 'splash':
         return <SplashScreen />;
