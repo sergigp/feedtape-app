@@ -170,15 +170,15 @@ class SherpaOnnxService {
     console.log(`[SherpaONNX] WAV file: ${wavFilePath}`);
 
     try {
-      // Configure audio mode for playback
+      // Configure audio mode for playback with background support
       console.log('[SherpaONNX] Configuring audio session...');
       await Audio.setAudioModeAsync({
         playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
+        staysActiveInBackground: true,
         shouldDuckAndroid: false,
         playThroughEarpieceAndroid: false,
       });
-      console.log('[SherpaONNX] Audio session configured');
+      console.log('[SherpaONNX] Audio session configured for background playback');
 
       // Load the audio file
       console.log('[SherpaONNX] Loading audio file...');
@@ -189,7 +189,11 @@ class SherpaOnnxService {
 
       const { sound, status } = await Audio.Sound.createAsync(
         { uri: fileUri },
-        { shouldPlay: true, volume: 1.0 },
+        {
+          shouldPlay: true,
+          volume: 1.0,
+          progressUpdateIntervalMillis: 500,
+        },
         this.onPlaybackStatusUpdate.bind(this)
       );
 
