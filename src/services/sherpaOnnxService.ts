@@ -24,6 +24,7 @@ class SherpaOnnxService {
     onDone?: () => void;
     onError?: (error: Error) => void;
   } = {};
+  private speakStartTime: number = 0;
 
   async initialize(language: 'en' | 'es' = 'en'): Promise<void> {
     const startTime = Date.now();
@@ -57,6 +58,9 @@ class SherpaOnnxService {
   }
 
   async speak(text: string, options?: SpeakOptions): Promise<void> {
+    // Track total user wait time
+    this.speakStartTime = Date.now();
+
     // Auto-initialize if needed
     if (!this.initialized) {
       const language = this.parseLanguage(options?.language);
@@ -66,7 +70,7 @@ class SherpaOnnxService {
     // Stop any current speech
     await this.stop();
 
-    console.log('[SherpaONNX] Speaking text with length:', text.length);
+    console.log('[SherpaONNX] 🎯 Starting TTS for text with length:', text.length);
 
     this.currentText = text;
     this.speaking = true;
@@ -120,9 +124,20 @@ class SherpaOnnxService {
     try {
       const wavFilePath = await TTSManager.generate(text, speakerId, speed);
 
-      const duration = Date.now() - startTime;
-      console.log(`[SherpaONNX] Generation completed in ${duration}ms`);
-      console.log(`[SherpaONNX] WAV file: ${wavFilePath}`);
+      const generationTimeMs = Date.now() - startTime;
+      const generationTimeSec = generationTimeMs / 1000;
+
+      // Calculate normalized metrics
+      const estimatedAudioDurationSec = this.estimateDuration(text);
+      const audioDurationMin = estimatedAudioDurationSec / 60;
+
+      // Normalize: seconds to generate 1 minute of audio
+      const secondsPerMinuteOfAudio = generationTimeSec / audioDurationMin;
+
+      // Performance logging
+      console.log(`[SherpaONNX] ✓ WAV generated in ${generationTimeSec.toFixed(2)}s`);
+      console.log(`[SherpaONNX] 📊 Audio: ~${this.formatDuration(estimatedAudioDurationSec)} (${estimatedAudioDurationSec}s)`);
+      console.log(`[SherpaONNX] ⚡ Performance: ${secondsPerMinuteOfAudio.toFixed(2)}s to generate 1min of audio`);
 
       return wavFilePath;
     } catch (error) {
@@ -202,7 +217,12 @@ class SherpaOnnxService {
       this.sound = sound;
       this.isPlaying = true;
 
-      console.log('[SherpaONNX] Playback started');
+      // Calculate total user wait time
+      const totalWaitTimeMs = Date.now() - this.speakStartTime;
+      const totalWaitTimeSec = totalWaitTimeMs / 1000;
+
+      console.log(`[SherpaONNX] ▶️ Playback started`);
+      console.log(`[SherpaONNX] ⏱️  Total wait time: ${totalWaitTimeSec.toFixed(2)}s (from speak() to playback)`);
 
       // Fire onStart callback
       this.currentCallbacks.onStart?.();

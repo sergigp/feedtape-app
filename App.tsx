@@ -12,18 +12,14 @@ import { SplashScreen } from './src/components/SplashScreen';
 import { FeedList } from './src/components/FeedList';
 import { TrackList } from './src/components/TrackList';
 import { SettingsScreen } from './src/components/SettingsScreen';
-import { SherpaTestScreen } from './src/components/SherpaTestScreen';
 import { parseRSSFeed, Post } from './src/services/rssParser';
-import nativeTtsService from './src/services/nativeTtsService';
+import sherpaOnnxService from './src/services/sherpaOnnxService';
 import feedService from './src/services/feedService';
 import readStatusService from './src/services/readStatusService';
 import { colors } from './src/constants/colors';
 import { Feed } from './src/types';
 
 type Screen = 'splash' | 'feedList' | 'trackList' | 'settings';
-
-// TEMPORARY: Set to true to test Sherpa ONNX (Iteration 1)
-const ENABLE_SHERPA_TEST = true;
 
 function AppContent() {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
@@ -50,7 +46,7 @@ function AppContent() {
     });
 
     return () => {
-      nativeTtsService.stop();
+      sherpaOnnxService.stop();
     };
   }, []);
 
@@ -110,7 +106,7 @@ function AppContent() {
     console.log('[App] Navigating back to feed list');
     // Stop playback when going back
     if (isPlaying) {
-      nativeTtsService.stop();
+      sherpaOnnxService.stop();
       setIsPlaying(false);
     }
     setSelectedIndex(null);
@@ -129,7 +125,7 @@ function AppContent() {
 
     // Stop current playback if any
     if (isPlaying) {
-      nativeTtsService.stop();
+      sherpaOnnxService.stop();
       setIsPlaying(false);
     }
 
@@ -184,7 +180,7 @@ function AppContent() {
       );
 
       // Speak the post with title announcement
-      nativeTtsService.speakWithTitle(post.title, post.plainText, {
+      sherpaOnnxService.speakWithTitle(post.title, post.plainText, {
         language: getLanguageForPost(post),
         onDone: async () => {
           console.log('[App] Post finished, checking for next unread post');
@@ -235,11 +231,11 @@ function AppContent() {
     if (!post) return;
 
     try {
-      const speaking = await nativeTtsService.isSpeaking();
+      const speaking = await sherpaOnnxService.isSpeaking();
 
       if (isPlaying || speaking) {
         // Stop
-        await nativeTtsService.stop();
+        await sherpaOnnxService.stop();
         setIsPlaying(false);
       } else {
         // Play using extracted playback helper
@@ -259,8 +255,8 @@ function AppContent() {
   };
 
   const getPostDuration = (post: Post): string => {
-    const seconds = nativeTtsService.estimateDuration(post.plainText);
-    return nativeTtsService.formatDuration(seconds);
+    const seconds = sherpaOnnxService.estimateDuration(post.plainText);
+    return sherpaOnnxService.formatDuration(seconds);
   };
 
   const handleSettingsPress = () => {
@@ -270,11 +266,6 @@ function AppContent() {
 
   // Render current screen
   const renderScreen = () => {
-    // TEMPORARY: Show Sherpa test screen for Iteration 1 testing
-    if (ENABLE_SHERPA_TEST) {
-      return <SherpaTestScreen />;
-    }
-
     // Show loading while checking authentication
     if (authLoading) {
       return (
