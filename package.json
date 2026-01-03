@@ -19,7 +19,7 @@
     "@react-native-async-storage/async-storage": "^2.2.0",
     "expo": "~54.0.12",
     "expo-auth-session": "^7.0.8",
-    "expo-av": "^16.0.7",
+    "expo-av": "~16.0.8",
     "expo-file-system": "~19.0.17",
     "expo-linear-gradient": "~15.0.8",
     "expo-secure-store": "^15.0.7",
@@ -28,7 +28,8 @@
     "expo-web-browser": "^15.0.8",
     "franc-min": "^6.2.0",
     "react": "19.1.0",
-    "react-native": "0.81.4"
+    "react-native": "0.81.4",
+    "react-native-sherpa-onnx-offline-tts": "github:sergigp/react-native-sherpa-onnx-offline-tts"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.28.3",

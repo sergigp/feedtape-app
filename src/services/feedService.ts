@@ -5,9 +5,7 @@ class FeedService {
   // Get all feeds for the current user
   async getFeeds(): Promise<Feed[]> {
     try {
-      console.log('[FeedService] Fetching feeds');
       const feeds = await ApiClient.get<Feed[]>('/api/feeds');
-      console.log(`[FeedService] Retrieved ${feeds.length} feeds`);
       return feeds;
     } catch (error) {
       console.error('[FeedService] Failed to fetch feeds:', error);
@@ -54,7 +52,6 @@ class FeedService {
   // Fetch RSS feed content from URL
   async fetchRSSContent(feedUrl: string): Promise<string> {
     try {
-      console.log('[FeedService] Fetching RSS content from:', feedUrl);
       const response = await fetch(feedUrl, {
         headers: {
           'Accept': 'application/rss+xml, application/xml, text/xml, */*',
@@ -66,7 +63,6 @@ class FeedService {
       }
 
       const xmlContent = await response.text();
-      console.log('[FeedService] RSS content fetched successfully');
       return xmlContent;
     } catch (error) {
       console.error('[FeedService] Failed to fetch RSS content:', error);

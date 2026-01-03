@@ -60,3 +60,7 @@ Thumbs.db
 
 # mobile
 android
+
+# Sherpa ONNX model files (now managed by Git LFS)
+# Large .onnx files tracked by LFS, other files in regular git
+*.xcscheme

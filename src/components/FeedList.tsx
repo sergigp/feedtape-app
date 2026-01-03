@@ -122,7 +122,6 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
   };
 
   const handleFeedPress = (feed: Feed) => {
-    console.log(`[FeedList] Feed selected: ${feed.title}`);
     setActiveFeed(feed);
     onFeedSelect(feed);
   };

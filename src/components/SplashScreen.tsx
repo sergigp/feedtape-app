@@ -3,14 +3,6 @@ import { View, Image, StyleSheet } from 'react-native';
 import { colors } from '../constants/colors';
 
 export const SplashScreen: React.FC = () => {
-  React.useEffect(() => {
-    console.log('[SplashScreen] Mounting');
-
-    return () => {
-      console.log('[SplashScreen] Unmounting');
-    };
-  }, []);
-
   return (
     <View style={styles.container}>
       <Image

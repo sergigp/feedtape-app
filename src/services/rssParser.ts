@@ -126,9 +126,8 @@ export function parseRSSItem(xmlString: string): Post | null {
         if (francResult !== 'und') {
           detectedLanguage = iso6393ToBCP47(francResult);
 
-          if (detectedLanguage) {
-            console.log(`[RSSParser] Detected: ${francResult} → ${detectedLanguage}`);
-          } else {
+          // Only log warnings for unmapped languages (not every detection)
+          if (!detectedLanguage) {
             console.warn(`[RSSParser] Unmapped language: ${francResult}`);
           }
         }
@@ -202,14 +201,18 @@ export function parseRSSFeed(xmlString: string): Post[] {
     const postDate = new Date(post.pubDate);
     const isRecent = postDate >= cutoffDate;
 
+    // Only log when filtering out old articles (not the common case)
     if (!isRecent) {
-      console.log(`[RSSParser] Filtering out old article (${post.pubDate}): ${post.title}`);
+      console.log(`[RSSParser] Filtered old article (${post.pubDate}): ${post.title}`);
     }
 
     return isRecent;
   });
 
-  console.log(`[RSSParser] Parsed ${recentPosts.length} recent articles (${posts.length - recentPosts.length} filtered as too old)`);
+  // Only log summary if articles were filtered
+  if (posts.length !== recentPosts.length) {
+    console.log(`[RSSParser] Parsed ${recentPosts.length} articles (${posts.length - recentPosts.length} filtered as too old)`);
+  }
 
   return recentPosts;
 }

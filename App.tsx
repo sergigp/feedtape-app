@@ -5,6 +5,8 @@ import {
   View,
   Alert,
   ActivityIndicator,
+  NativeEventEmitter,
+  NativeModules,
 } from 'react-native';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { LoginScreen } from './src/components/LoginScreen';
@@ -13,7 +15,7 @@ import { FeedList } from './src/components/FeedList';
 import { TrackList } from './src/components/TrackList';
 import { SettingsScreen } from './src/components/SettingsScreen';
 import { parseRSSFeed, Post } from './src/services/rssParser';
-import nativeTtsService from './src/services/nativeTtsService';
+import sherpaOnnxService from './src/services/sherpaOnnxService';
 import feedService from './src/services/feedService';
 import readStatusService from './src/services/readStatusService';
 import { colors } from './src/constants/colors';
@@ -45,8 +47,23 @@ function AppContent() {
       console.error('[App] Failed to initialize read status:', error);
     });
 
+    // Add volume listener to suppress VolumeUpdate warnings
+    let volumeSubscription: any = null;
+    try {
+      const TTSManager = NativeModules.TTSManager;
+      if (TTSManager) {
+        const eventEmitter = new NativeEventEmitter(TTSManager);
+        volumeSubscription = eventEmitter.addListener('VolumeUpdate', () => {
+          // No-op listener to suppress warnings
+        });
+      }
+    } catch (e) {
+      // Ignore if event emitter setup fails
+    }
+
     return () => {
-      nativeTtsService.stop();
+      sherpaOnnxService.stop();
+      volumeSubscription?.remove();
     };
   }, []);
 
@@ -74,7 +91,6 @@ function AppContent() {
 
   // Navigation handlers
   const handleFeedSelect = async (feed: Feed) => {
-    console.log(`[App] Feed selected: ${feed.title}, fetching RSS content`);
     setSelectedFeed(feed);
     setIsLoading(true);
 
@@ -106,7 +122,7 @@ function AppContent() {
     console.log('[App] Navigating back to feed list');
     // Stop playback when going back
     if (isPlaying) {
-      nativeTtsService.stop();
+      sherpaOnnxService.stop();
       setIsPlaying(false);
     }
     setSelectedIndex(null);
@@ -115,8 +131,6 @@ function AppContent() {
 
   // Track selection and playback handlers
   const selectArticle = async (index: number) => {
-    console.log(`[App] Track selected: ${index}`);
-
     // If clicking on the currently selected track, toggle play/pause
     if (selectedIndex === index) {
       await handlePlayPause();
@@ -125,7 +139,7 @@ function AppContent() {
 
     // Stop current playback if any
     if (isPlaying) {
-      nativeTtsService.stop();
+      sherpaOnnxService.stop();
       setIsPlaying(false);
     }
 
@@ -180,7 +194,7 @@ function AppContent() {
       );
 
       // Speak the post with title announcement
-      nativeTtsService.speakWithTitle(post.title, post.plainText, {
+      sherpaOnnxService.speakWithTitle(post.title, post.plainText, {
         language: getLanguageForPost(post),
         onDone: async () => {
           console.log('[App] Post finished, checking for next unread post');
@@ -231,11 +245,11 @@ function AppContent() {
     if (!post) return;
 
     try {
-      const speaking = await nativeTtsService.isSpeaking();
+      const speaking = await sherpaOnnxService.isSpeaking();
 
       if (isPlaying || speaking) {
         // Stop
-        await nativeTtsService.stop();
+        await sherpaOnnxService.stop();
         setIsPlaying(false);
       } else {
         // Play using extracted playback helper
@@ -255,8 +269,8 @@ function AppContent() {
   };
 
   const getPostDuration = (post: Post): string => {
-    const seconds = nativeTtsService.estimateDuration(post.plainText);
-    return nativeTtsService.formatDuration(seconds);
+    const seconds = sherpaOnnxService.estimateDuration(post.plainText);
+    return sherpaOnnxService.formatDuration(seconds);
   };
 
   const handleSettingsPress = () => {
@@ -281,8 +295,6 @@ function AppContent() {
     }
 
     // Show app screens if authenticated
-    console.log(`[App] Rendering screen: ${currentScreen}`);
-
     switch (currentScreen) {
       case 'splash':
         return <SplashScreen />;
