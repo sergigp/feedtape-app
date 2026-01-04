@@ -86,3 +86,99 @@ After initial implementation, simplified the design based on user feedback:
 ### Next Steps
 
 Iteration 2 will implement the Content Cleaning Service with multi-step HTML transformation pipeline.
+
+---
+
+## Iteration 2: Content Cleaning Service
+
+**Date**: 2026-01-04
+
+### What Was Implemented
+
+1. **Created contentCleaningService.ts** (src/services/contentCleaningService.ts)
+   - Multi-step cleaning pipeline with three distinct phases
+   - Singleton service pattern matching other services in the codebase
+   - Error handling with try-catch and null returns for failures
+
+2. **Implemented htmlToText() method**
+   - Uses `html-to-text` library's `convert()` function
+   - Configuration:
+     - `wordwrap: false` - Preserves natural text flow
+     - Skips `img`, `script`, `style` tags entirely
+     - Ignores href attributes in links (keeps only link text)
+   - Removes all HTML structure while preserving text content
+
+3. **Implemented removeJunk() method**
+   - Removes control characters: `/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g`
+   - Fixes double-escaped HTML entities:
+     - `&amp;lt;` → `&lt;`
+     - `&amp;gt;` → `&gt;`
+     - `&amp;quot;` → `&quot;`
+     - `&amp;amp;` → `&amp;`
+
+4. **Implemented postProcessForTTS() method**
+   - URL removal: `/https?:\/\/[^\s]+/g`
+   - Abbreviation expansion:
+     - `etc.` → `etcetera`
+     - `e.g.` → `for example`
+     - `i.e.` → `that is`
+   - Symbol replacement:
+     - `&` → ` and `
+     - `@` → ` at `
+     - `#word` → `hashtag word`
+   - Number formatting:
+     - `10k` → `10 thousand`
+     - `5m` → `5 million`
+   - Whitespace normalization:
+     - Collapse multiple newlines: `/\n{3,}/g` → `\n\n`
+     - Collapse multiple spaces: `/\s{2,}/g` → ` `
+     - Trim leading/trailing whitespace
+
+5. **Added minimum content length validation**
+   - Constant: `MIN_CONTENT_LENGTH = 50`
+   - Returns `null` if cleaned content is too short
+   - Logs rejection to console for debugging
+
+6. **Installed TypeScript types**
+   - Added `@types/html-to-text` dev dependency
+   - Ensures type safety for html-to-text library usage
+
+### Decisions Made
+
+- **Multi-step pipeline**: Separated cleaning into three distinct methods for easier debugging
+  - Can inspect intermediate results between steps
+  - Easier to identify which transformation is causing issues
+  - Matches spec requirements for debugging-friendly architecture
+
+- **Null return on failure**: Service returns `null` instead of throwing errors
+  - Consistent with spec: "skip posts that fail cleaning"
+  - Easier for pipeline service to handle failures
+  - Logged errors provide debugging information
+
+- **Aggressive content removal**: Removes all images, scripts, styles
+  - TTS can't use visual content anyway
+  - Eliminates tracking pixels automatically
+  - Reduces junk in final output
+
+- **Conservative TTS transformations**: Focused on common abbreviations and symbols
+  - Can expand later based on real-world testing
+  - Avoided overly aggressive transformations that might break content
+  - Left room for future refinements (bullet points, acronyms, etc.)
+
+### Issues Found
+
+- **TypeScript compilation error**: Missing `@types/html-to-text` initially
+  - **Resolution**: Installed `@types/html-to-text` as dev dependency
+  - TypeScript compilation now succeeds with no errors
+
+### Testing Approach
+
+Manual testing will occur during pipeline integration (Iteration 3):
+- Service will be called by pipeline with real RSS content
+- Console logs will show before/after cleaning results
+- Can verify transformations work correctly with actual feed data
+- Performance metrics will be logged by pipeline service
+
+### Next Steps
+
+Iteration 3 will implement the Pipeline Service with phase-based architecture and batch processing.
