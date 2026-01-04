@@ -14,7 +14,7 @@ import { SplashScreen } from './src/components/SplashScreen';
 import { FeedList } from './src/components/FeedList';
 import { TrackList } from './src/components/TrackList';
 import { SettingsScreen } from './src/components/SettingsScreen';
-import { parseRSSFeed, Post } from './src/services/rssParser';
+import { parseRSSFeed, ParsedPost, Post } from './src/services/rssParser';
 import sherpaOnnxService from './src/services/sherpaOnnxService';
 import feedService from './src/services/feedService';
 import readStatusService from './src/services/readStatusService';
@@ -99,11 +99,20 @@ function AppContent() {
       const xmlContent = await feedService.fetchRSSContent(feed.url);
 
       // Parse the RSS feed (filters articles older than 90 days)
-      const posts = parseRSSFeed(xmlContent);
-      console.log(`[App] Parsed ${posts.length} posts from ${feed.title}`);
+      const parsedPosts = parseRSSFeed(xmlContent);
+      console.log(`[App] Parsed ${parsedPosts.length} posts from ${feed.title}`);
+
+      // Convert ParsedPost to Post with state machine fields
+      const enrichedPosts: Post[] = parsedPosts.map((parsed) => ({
+        ...parsed,
+        feedId: feed.id,
+        rawContent: parsed.content,
+        cleanedContent: null,
+        status: 'raw' as const,
+      }));
 
       // Update posts state
-      setPosts(posts);
+      setPosts(enrichedPosts);
 
       // Navigate to track list
       setCurrentScreen('trackList');

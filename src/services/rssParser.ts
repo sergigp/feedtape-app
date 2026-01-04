@@ -2,14 +2,14 @@
 // Extracts and processes text content from RSS feed items
 
 import { iso6393ToBCP47 } from '../utils/languageMapper';
-import { Post } from '../types';
+import { ParsedPost, Post } from '../types';
 
 // React Native requires using require() for franc-min and accessing the correct export
 const francModule = require('franc-min');
 const franc = francModule.default || francModule.franc || francModule;
 
-// Re-export Post for convenience
-export { Post };
+// Re-export types for convenience
+export { ParsedPost, Post };
 
 /**
  * Strips HTML tags and decodes HTML entities from text
@@ -43,7 +43,7 @@ export function stripHtml(html: string): string {
 /**
  * Parses RSS/Atom XML string and extracts article content
  */
-export function parseRSSItem(xmlString: string): Post | null {
+export function parseRSSItem(xmlString: string): ParsedPost | null {
   try {
     // Extract CDATA content using regex
     const extractCDATA = (text: string): string => {
@@ -161,8 +161,8 @@ export function parseRSSItem(xmlString: string): Post | null {
  *
  * @param xmlString - The RSS/Atom XML string to parse
  */
-export function parseRSSFeed(xmlString: string): Post[] {
-  const posts: Post[] = [];
+export function parseRSSFeed(xmlString: string): ParsedPost[] {
+  const posts: ParsedPost[] = [];
 
   // CRITICAL: Must match CLEANUP_AGE_DAYS in readStatusService.ts
   // Only show articles from last 90 days to prevent old articles showing as "unread"

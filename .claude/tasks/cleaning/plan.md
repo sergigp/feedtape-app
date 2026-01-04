@@ -137,8 +137,8 @@ Playback → use cleanedContent field
    - Async queue: process as slots become available
    - Don't wait for full batch to complete
 5. Add performance logging:
-   - `[Pipeline] Starting processing for ${postId}`
-   - `[Cleaning] Started/Completed/Failed for ${postId} in ${duration}ms`
+   - `[Pipeline] Starting processing for ${post.link}`
+   - `[Cleaning] Started/Completed/Failed for ${post.link} in ${duration}ms`
 6. Export singleton
 
 ---
@@ -309,7 +309,7 @@ Playback → use cleanedContent field
 
 ### Pipeline Execution
 - **App backgrounded**: Continue processing (pause feature deferred)
-- **Multiple updates**: Use post.id for O(1) lookup in updatePost()
+- **Multiple updates**: Use post.link for O(1) lookup in updatePost()
 - **Race conditions**: Use functional setState for atomic updates
 
 ### Display & Playback
