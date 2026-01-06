@@ -182,3 +182,206 @@ Manual testing will occur during pipeline integration (Iteration 3):
 ### Next Steps
 
 Iteration 3 will implement the Pipeline Service with phase-based architecture and batch processing.
+
+---
+
+## Iteration 3: Pipeline Service & Phase Architecture
+
+**Date**: 2026-01-04
+
+### What Was Implemented
+
+1. **Created contentPipelineService.ts** (src/services/contentPipelineService.ts)
+   - Singleton service pattern matching other services in the codebase
+   - Phase-based architecture with extensible phase array
+   - Batch processing with configurable batch size (default: 10)
+   - Queue-based execution with async task management
+
+2. **Implemented cleaningPhase() method**
+   - Wraps contentCleaningService.cleanContent()
+   - Updates post status to 'cleaned' or 'error'
+   - Performance logging with duration tracking
+   - Error handling with try-catch
+   - Console logs: Started/Completed/Failed with duration in ms
+
+3. **Implemented processPost() method**
+   - Orchestrates sequential phase execution
+   - Updates post status before each phase ('cleaning')
+   - Calls onUpdate callback after each phase
+   - Stops processing if error occurs
+   - Logs post status transitions
+
+4. **Implemented processPosts() method**
+   - Batch processing with BATCH_SIZE = 10
+   - Queue-based task management
+   - Asynchronous execution - processes next task as soon as slot becomes available
+   - Doesn't wait for full batch to complete before starting new tasks
+   - Console logs: Batch start, queue size
+
+5. **Implemented runQueuedTask() private method**
+   - Manages active task count
+   - Dequeues tasks when slots available
+   - Automatically starts next task after completion
+   - Ensures batch size limit is respected
+
+6. **Added comprehensive performance logging**
+   - `[Pipeline] Starting processing for ${post.link} (${characterCount} chars)`
+   - `[Cleaning] Started for ${post.link}`
+   - `[Cleaning] Completed for ${post.link} in ${duration}ms`
+   - `[Cleaning] Failed for ${post.link} in ${duration}ms`
+   - `[Pipeline] Post ${post.link} status: ${status}`
+   - `[Pipeline] Queued ${count} posts for processing`
+
+### Decisions Made
+
+- **Phase array architecture**: Used array of PipelinePhase functions for extensibility
+  - Easy to add new phases (summarization, TTS enhancement) in the future
+  - Each phase is independent and testable
+  - Sequential execution ensures proper state transitions
+
+- **Queue-based batch processing**: Implemented async queue instead of Promise.all batches
+  - More efficient: starts new task immediately when slot becomes available
+  - Doesn't wait for all 10 tasks to complete before starting next batch
+  - Better resource utilization with long-running operations
+
+- **Status tracking**: Updates status before and after each phase
+  - Provides visibility into pipeline progress
+  - Allows UI to show loading states (future iteration)
+  - Makes debugging easier with status transition logs
+
+- **onUpdate callback pattern**: Passes updated post to callback after each phase
+  - Will integrate cleanly with PostsContext setState (Iteration 4)
+  - Allows incremental UI updates as pipeline progresses
+  - Decouples pipeline from state management
+
+- **Error handling strategy**: Returns error status instead of throwing
+  - Failed posts marked as 'error' and skipped
+  - Errors logged to console with full context
+  - Other posts continue processing unaffected
+
+### Issues Found
+
+- None - TypeScript compilation succeeds with no errors
+
+### Testing Approach
+
+Manual testing will occur during PostsContext integration (Iteration 4):
+- Pipeline will be called with real posts from RSS feeds
+- Console logs will verify status transitions
+- Performance metrics will measure cleaning duration
+- Can observe batch processing behavior with multiple feeds
+
+### Next Steps
+
+Iteration 4 will implement PostsContext for global state management, which will consume the pipeline service via the onUpdate callback.
+
+---
+
+## Iteration 3.5: Unit Tests for Pipeline Service (Bonus)
+
+**Date**: 2026-01-04
+
+### What Was Implemented
+
+1. **Refactored ContentPipelineService for testability**
+   - Exported `ContentPipelineService` class and `PipelinePhase` type for testing
+   - Made `batchSize` configurable via constructor (allows tests to use smaller batch sizes)
+   - Added optional `phases` parameter to `processPost()` and `processPosts()`
+   - Created `getDefaultPhases()` method to maintain backward compatibility
+   - Made `runQueuedTask()` public for testing queue behavior
+   - Added test helper methods: `getActiveTasks()`, `getQueueLength()`, `clearQueue()`
+   - Maintained backward compatibility - existing code works without changes
+
+2. **Created comprehensive unit test suite** (src/services/__tests__/contentPipelineService.test.ts)
+   - 14 tests covering all major functionality
+   - Tests completely isolated from cleaning phase logic
+   - Uses mock phases for all testing
+   - No dependencies on actual content cleaning
+
+3. **Test Coverage by Category**:
+
+   **Queue Management (4 tests)**:
+   - Batch size limits respected during concurrent processing
+   - All posts eventually processed regardless of queue size
+   - Tasks start immediately when slots become available (not batch-and-wait)
+   - Queue clearing works correctly
+
+   **Phase Orchestration (4 tests)**:
+   - Phases execute in sequential order
+   - onUpdate callback invoked after each phase
+   - Updated post data passes correctly between phases
+   - Processing stops when error status is set
+
+   **Error Handling (4 tests)**:
+   - Phase exceptions caught and handled gracefully
+   - Failed posts don't affect other posts in queue
+   - Errors logged to console with context
+   - Pipeline continues after errors
+
+   **Integration Tests (2 tests)**:
+   - Async phases with different durations work correctly
+   - Many posts with varying processing times all complete
+
+### Decisions Made
+
+- **Dependency injection pattern**: Made phases injectable without breaking existing code
+  - Tests can use simple mock phases (instant execution, predictable behavior)
+  - No need to mock contentCleaningService or other dependencies
+  - Future pipelines (TTS, summarization) can reuse the same test approach
+
+- **Test isolation**: Tests completely independent of cleaning logic
+  - Mock phases use simple delay + status change
+  - No HTML processing, no file I/O, no external dependencies
+  - Tests run fast (<2 seconds for full suite)
+  - Easy to debug failures
+
+- **Backward compatibility**: Existing code requires zero changes
+  - Singleton export still works: `import service from './contentPipelineService'`
+  - Default phases used when none provided
+  - All existing APIs unchanged
+
+### Test Results
+
+```
+PASS src/services/__tests__/contentPipelineService.test.ts
+  ContentPipelineService
+    Queue Management
+      ✓ should respect batch size limit (12 ms)
+      ✓ should process all posts eventually (202 ms)
+      ✓ should start next task as soon as slot becomes available (52 ms)
+      ✓ should clear queue properly (1 ms)
+    Phase Orchestration
+      ✓ should call phases in sequential order (2 ms)
+      ✓ should call onUpdate callback after each phase (1 ms)
+      ✓ should pass updated post to next phase (1 ms)
+      ✓ should stop processing on error status (1 ms)
+    Error Handling
+      ✓ should handle phase throwing error (1 ms)
+      ✓ should not affect other posts if one fails (101 ms)
+      ✓ should log error when phase fails (1 ms)
+      ✓ should continue to next post after error (203 ms)
+    Integration with Async Operations
+      ✓ should handle async phases with different durations (64 ms)
+      ✓ should handle many posts with varying processing times (303 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       14 passed, 14 total
+Time:        1.448 s
+```
+
+### Benefits for Future Development
+
+1. **Reusable pipeline pattern**: Same architecture can be used for:
+   - TTS generation pipeline (future task)
+   - Summarization pipeline (future phase)
+   - Any multi-step async processing
+
+2. **Confidence in refactoring**: Can modify queue logic or phase orchestration with test safety net
+
+3. **Documentation**: Tests serve as executable documentation of expected behavior
+
+4. **Regression prevention**: Queue bugs, race conditions, and error handling issues caught immediately
+
+### Next Steps
+
+Iteration 4 will implement PostsContext for global state management, which will consume the pipeline service via the onUpdate callback.
