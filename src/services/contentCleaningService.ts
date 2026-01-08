@@ -1,9 +1,16 @@
 import { convert } from 'html-to-text';
 
 const MIN_CONTENT_LENGTH = 50;
+const MAX_CONTENT_LENGTH = 500_000; // 500KB - prevent memory exhaustion attacks
 
 class ContentCleaningService {
   cleanContent(rawHtml: string): string | null {
+    // Security: Validate input size to prevent memory exhaustion from malicious feeds
+    if (rawHtml.length > MAX_CONTENT_LENGTH) {
+      console.warn(`[Cleaning] Content too large: ${rawHtml.length} chars (max: ${MAX_CONTENT_LENGTH})`);
+      return null;
+    }
+
     try {
       const plainText = this.htmlToText(rawHtml);
       const cleaned = this.removeJunk(plainText);

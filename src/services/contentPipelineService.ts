@@ -114,8 +114,10 @@ export class ContentPipelineService {
       await task();
     } finally {
       this.activeTasks--;
-      // Process next queued task if available
-      await this.runQueuedTask();
+      // Process next queued task only if queue has items
+      if (this.queue.length > 0) {
+        await this.runQueuedTask();
+      }
     }
   }
 

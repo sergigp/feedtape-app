@@ -18,6 +18,7 @@ import { SettingsScreen } from './src/components/SettingsScreen';
 import { Post } from './src/services/rssParser';
 import sherpaOnnxService from './src/services/sherpaOnnxService';
 import readStatusService from './src/services/readStatusService';
+import contentPipelineService from './src/services/contentPipelineService';
 import { colors } from './src/constants/colors';
 import { Feed } from './src/types';
 
@@ -114,6 +115,9 @@ function AppContent() {
       setIsPlaying(false);
     }
     setSelectedIndex(null);
+    // Clear pipeline queue to stop processing posts that aren't being viewed
+    contentPipelineService.clearQueue();
+    console.log('[App] Cleared pipeline queue');
     // Posts stay in context - no need to clear
     setCurrentScreen('feedList');
   };

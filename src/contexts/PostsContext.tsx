@@ -30,8 +30,16 @@ interface PostsProviderProps {
 export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // Performance: Use Map for O(1) post lookups by link
+  const [postIndexMap, setPostIndexMap] = useState<Map<string, number>>(new Map());
 
   const initializeFeeds = async () => {
+    // Prevent concurrent calls
+    if (isLoading) {
+      console.log('[PostsContext] Already loading, skipping duplicate initialization');
+      return;
+    }
+
     console.log('[PostsContext] Starting feed initialization');
     setIsLoading(true);
 
@@ -78,8 +86,13 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
 
       console.log(`[PostsContext] Collected ${allPosts.length} posts from ${results.filter(r => r.status === 'fulfilled').length}/${feeds.length} feeds`);
 
-      // Add posts to state
+      // Add posts to state and build index map
       setPosts(allPosts);
+      const indexMap = new Map<string, number>();
+      allPosts.forEach((post, index) => {
+        indexMap.set(post.link, index);
+      });
+      setPostIndexMap(indexMap);
       setIsLoading(false);
 
       // Start pipeline processing (non-blocking)
@@ -93,14 +106,15 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
 
   // Update a single post by link (unique identifier)
   const updatePost = (updatedPost: Post) => {
-    setPosts(prevPosts => {
-      const index = prevPosts.findIndex(p => p.link === updatedPost.link);
-      if (index === -1) {
-        // Post not found - this shouldn't happen, but log it
-        console.warn('[PostsContext] updatePost called for unknown post:', updatedPost.link);
-        return prevPosts;
-      }
+    // Performance: Use Map for O(1) lookup instead of O(n) findIndex
+    const index = postIndexMap.get(updatedPost.link);
+    if (index === undefined) {
+      // Post not found - this shouldn't happen, but log it
+      console.warn('[PostsContext] updatePost called for unknown post:', updatedPost.link);
+      return;
+    }
 
+    setPosts(prevPosts => {
       // Create new array with updated post (immutable update)
       const newPosts = [...prevPosts];
       newPosts[index] = updatedPost;
@@ -117,6 +131,7 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
   const clearPosts = () => {
     console.log('[PostsContext] Clearing all posts');
     setPosts([]);
+    setPostIndexMap(new Map());
     setIsLoading(false);
   };
 
