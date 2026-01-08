@@ -96,19 +96,40 @@ export function parseRSSItem(xmlString: string): ParsedPost | null {
       }
     }
 
-    // Extract description/content (RSS: <description>, Atom: <content> or <summary>)
+    // Extract content with RSS best practices priority:
+    // 1. <content:encoded> (RSS 2.0 full article)
+    // 2. <content> (Atom full article)
+    // 3. <description> (RSS 2.0 fallback, may be summary or full content)
+    // 4. <summary> (Atom summary)
     let content = '';
-    const descriptionMatch = xmlString.match(/<description>(.*?)<\/description>/s);
-    if (descriptionMatch) {
-      content = extractCDATA(descriptionMatch[1]).trim();
-    } else {
+
+    // Priority 1: content:encoded (RSS 2.0 Content Module - full article)
+    const contentEncodedMatch = xmlString.match(/<content:encoded>(.*?)<\/content:encoded>/s);
+    if (contentEncodedMatch) {
+      content = extractCDATA(contentEncodedMatch[1]).trim();
+      console.log(`[RSSParser] Using content:encoded (${content.length} chars)`);
+    }
+    // Priority 2: content (Atom - full article)
+    else {
       const contentMatch = xmlString.match(/<content[^>]*>(.*?)<\/content>/s);
       if (contentMatch) {
         content = extractCDATA(contentMatch[1]).trim();
-      } else {
-        const summaryMatch = xmlString.match(/<summary[^>]*>(.*?)<\/summary>/s);
-        if (summaryMatch) {
-          content = extractCDATA(summaryMatch[1]).trim();
+        console.log(`[RSSParser] Using <content> (${content.length} chars)`);
+      }
+      // Priority 3: description (RSS 2.0 - may be summary or full content)
+      else {
+        const descriptionMatch = xmlString.match(/<description>(.*?)<\/description>/s);
+        if (descriptionMatch) {
+          content = extractCDATA(descriptionMatch[1]).trim();
+          console.log(`[RSSParser] Using <description> (${content.length} chars)`);
+        }
+        // Priority 4: summary (Atom - always summary)
+        else {
+          const summaryMatch = xmlString.match(/<summary[^>]*>(.*?)<\/summary>/s);
+          if (summaryMatch) {
+            content = extractCDATA(summaryMatch[1]).trim();
+            console.log(`[RSSParser] Using <summary> (${content.length} chars)`);
+          }
         }
       }
     }
