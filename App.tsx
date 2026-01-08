@@ -15,9 +15,8 @@ import { SplashScreen } from './src/components/SplashScreen';
 import { FeedList } from './src/components/FeedList';
 import { TrackList } from './src/components/TrackList';
 import { SettingsScreen } from './src/components/SettingsScreen';
-import { parseRSSFeed, ParsedPost, Post } from './src/services/rssParser';
+import { Post } from './src/services/rssParser';
 import sherpaOnnxService from './src/services/sherpaOnnxService';
-import feedService from './src/services/feedService';
 import readStatusService from './src/services/readStatusService';
 import { colors } from './src/constants/colors';
 import { Feed } from './src/types';
@@ -26,14 +25,13 @@ type Screen = 'splash' | 'feedList' | 'trackList' | 'settings';
 
 function AppContent() {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
-  const { posts: contextPosts, isLoading: postsLoading, initializeFeeds } = usePosts();
+  const { isLoading: postsLoading, initializeFeeds, getPostsByFeed } = usePosts();
 
   // Navigation state
   const [currentScreen, setCurrentScreen] = useState<Screen>('splash');
   const [selectedFeed, setSelectedFeed] = useState<Feed | null>(null);
 
-  // Post state (keep local state for TrackList screen, but will transition to context later)
-  const [posts, setPosts] = useState<Post[]>([]);
+  // Track selection state
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [progressMap, setProgressMap] = useState<{ [key: number]: number }>({});
 
@@ -101,40 +99,11 @@ function AppContent() {
 
   // Navigation handlers
   const handleFeedSelect = async (feed: Feed) => {
+    console.log(`[App] Feed selected: ${feed.title}`);
     setSelectedFeed(feed);
-    setIsLoading(true);
 
-    try {
-      // Fetch RSS content from the feed URL
-      const xmlContent = await feedService.fetchRSSContent(feed.url);
-
-      // Parse the RSS feed (filters articles older than 90 days)
-      const parsedPosts = parseRSSFeed(xmlContent);
-      console.log(`[App] Parsed ${parsedPosts.length} posts from ${feed.title}`);
-
-      // Convert ParsedPost to Post with state machine fields
-      const enrichedPosts: Post[] = parsedPosts.map((parsed) => ({
-        ...parsed,
-        feedId: feed.id,
-        rawContent: parsed.content,
-        cleanedContent: null,
-        status: 'raw' as const,
-      }));
-
-      // Update posts state
-      setPosts(enrichedPosts);
-
-      // Navigate to track list
-      setCurrentScreen('trackList');
-    } catch (error) {
-      console.error('[App] Failed to fetch/parse RSS feed:', error);
-      Alert.alert(
-        'Error Loading Feed',
-        'Failed to load posts from this feed. Please check the feed URL and try again.'
-      );
-    } finally {
-      setIsLoading(false);
-    }
+    // Navigate to track list - posts are already in context from app startup
+    setCurrentScreen('trackList');
   };
 
   const handleBackToFeedList = () => {
@@ -145,11 +114,21 @@ function AppContent() {
       setIsPlaying(false);
     }
     setSelectedIndex(null);
+    // Posts stay in context - no need to clear
     setCurrentScreen('feedList');
+  };
+
+  // Helper function to get cleaned posts for the selected feed
+  const getCleanedPosts = (): Post[] => {
+    if (!selectedFeed) return [];
+    const feedPosts = getPostsByFeed(selectedFeed.id);
+    return feedPosts.filter((post: Post) => post.status === 'cleaned');
   };
 
   // Track selection and playback handlers
   const selectArticle = async (index: number) => {
+    const posts = getCleanedPosts();
+
     // If clicking on the currently selected track, toggle play/pause
     if (selectedIndex === index) {
       await handlePlayPause();
@@ -212,12 +191,28 @@ function AppContent() {
         post.title
       );
 
+      // Use cleanedContent if available, fallback to plainText for backward compatibility
+      const contentToSpeak = post.cleanedContent || post.plainText;
+      const usingCleaned = post.cleanedContent !== null;
+
+      // Log cleaning status and content sample
+      console.log(`[App] Playback using ${usingCleaned ? 'CLEANED' : 'FALLBACK'} content (status: ${post.status})`);
+
+      // Log first 5 sentences to evaluate cleaning quality
+      const sentences = contentToSpeak.split(/[.!?]+\s+/).filter(s => s.trim().length > 0);
+      const firstFiveSentences = sentences.slice(0, 5).join('. ') + '.';
+      console.log('[App] First 5 sentences:');
+      console.log(firstFiveSentences);
+      console.log(`[App] Total: ${contentToSpeak.length} chars, ${sentences.length} sentences`);
+
       // Speak the post with title announcement
-      sherpaOnnxService.speakWithTitle(post.title, post.plainText, {
+      sherpaOnnxService.speakWithTitle(post.title, contentToSpeak, {
         language: getLanguageForPost(post),
         onDone: async () => {
           console.log('[App] Post finished, checking for next unread post');
           setIsPlaying(false);
+
+          const posts = getCleanedPosts();
 
           // Find next unread post
           const nextUnreadIndex = posts.findIndex((p, i) =>
@@ -260,6 +255,7 @@ function AppContent() {
   const handlePlayPause = async () => {
     if (selectedIndex === null) return;
 
+    const posts = getCleanedPosts();
     const post = posts[selectedIndex];
     if (!post) return;
 
@@ -282,13 +278,16 @@ function AppContent() {
   };
 
   const handleSkipForward = () => {
+    const posts = getCleanedPosts();
     if (selectedIndex !== null && selectedIndex < posts.length - 1) {
       selectArticle(selectedIndex + 1);
     }
   };
 
   const getPostDuration = (post: Post): string => {
-    const seconds = sherpaOnnxService.estimateDuration(post.plainText);
+    // Use cleanedContent for more accurate duration estimation
+    const content = post.cleanedContent || post.plainText;
+    const seconds = sherpaOnnxService.estimateDuration(content);
     return sherpaOnnxService.formatDuration(seconds);
   };
 
@@ -327,10 +326,10 @@ function AppContent() {
         );
 
       case 'trackList':
-        return (
+        return selectedFeed ? (
           <TrackList
-            feedTitle={selectedFeed?.title || selectedFeed?.url || ''}
-            posts={posts}
+            feedId={selectedFeed.id}
+            feedTitle={selectedFeed.title || selectedFeed.url || ''}
             selectedIndex={selectedIndex}
             progressMap={progressMap}
             isPlaying={isPlaying}
@@ -342,7 +341,7 @@ function AppContent() {
             onSettingsPress={handleSettingsPress}
             getPostDuration={getPostDuration}
           />
-        );
+        ) : null;
 
       case 'settings':
         return <SettingsScreen onBack={() => setCurrentScreen('feedList')} />;

@@ -17,12 +17,13 @@ import { TechnicolorButton } from './TechnicolorButton';
 import { Post } from '../types';
 import { colors } from '../constants/colors';
 import readStatusService from '../services/readStatusService';
+import { usePosts } from '../contexts/PostsContext';
 
 const { width } = Dimensions.get('window');
 
 interface TrackListProps {
+  feedId: string;
   feedTitle: string;
-  posts: Post[];
   selectedIndex: number | null;
   progressMap: { [key: number]: number };
   isPlaying: boolean;
@@ -36,8 +37,8 @@ interface TrackListProps {
 }
 
 export const TrackList: React.FC<TrackListProps> = ({
+  feedId,
   feedTitle,
-  posts,
   selectedIndex,
   progressMap,
   isPlaying,
@@ -49,6 +50,14 @@ export const TrackList: React.FC<TrackListProps> = ({
   onSettingsPress,
   getPostDuration,
 }) => {
+  const { getPostsByFeed } = usePosts();
+
+  // Get posts from context, filtered by feedId and status='cleaned'
+  const posts = React.useMemo(() => {
+    const feedPosts = getPostsByFeed(feedId);
+    return feedPosts.filter(post => post.status === 'cleaned');
+  }, [feedId, getPostsByFeed]);
+
   // Calculate new tracks count based on read status
   const newTracksCount = React.useMemo(() => {
     return posts.filter(post => !readStatusService.isRead(post.link)).length;

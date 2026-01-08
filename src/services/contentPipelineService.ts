@@ -19,6 +19,7 @@ export class ContentPipelineService {
     console.log(`[Cleaning] Started for ${post.link}`);
 
     try {
+      // Clean content
       const cleanedContent = contentCleaningService.cleanContent(post.rawContent);
 
       if (cleanedContent === null) {
@@ -30,11 +31,18 @@ export class ContentPipelineService {
         };
       }
 
+      // Clean title (decode HTML entities)
+      const cleanedTitle = contentCleaningService.cleanTitle(post.title);
+      if (cleanedTitle !== post.title) {
+        console.log(`[Cleaning] Title cleaned: "${post.title}" → "${cleanedTitle}"`);
+      }
+
       const duration = Date.now() - startTime;
       console.log(`[Cleaning] Completed for ${post.link} in ${duration}ms`);
 
       return {
         ...post,
+        title: cleanedTitle,
         cleanedContent,
         status: 'cleaned',
       };
