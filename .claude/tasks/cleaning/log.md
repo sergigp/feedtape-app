@@ -486,3 +486,111 @@ Iteration 5 will implement App Startup Integration:
 - Integrate contentPipelineService with updatePost() callback
 - Add PostsProvider to App.tsx component tree
 - Ensure splash screen stays visible until feeds are loaded
+
+---
+
+## Iteration 5: App Startup Integration
+
+**Date**: 2026-01-08
+
+### What Was Implemented
+
+1. **Implemented initializeFeeds() in PostsContext** (src/contexts/PostsContext.tsx)
+   - Fetches all feeds from backend using `feedService.getFeeds()`
+   - Fetches RSS content for all feeds in parallel
+   - 15-second timeout per feed using `Promise.race()`
+   - Uses `Promise.allSettled()` for graceful failure handling
+   - Converts ParsedPost to Post with state machine fields:
+     - `feedId: feed.id`
+     - `rawContent: parsed.content`
+     - `cleanedContent: null`
+     - `status: 'raw'`
+   - Adds all posts to state with `setPosts(allPosts)`
+   - Starts pipeline processing automatically with `contentPipelineService.processPosts(allPosts, updatePost)`
+   - Console logging for visibility into feed fetching process
+
+2. **Updated App.tsx to integrate PostsProvider**
+   - Imported `PostsProvider` and `usePosts` hook (line 12)
+   - Added PostsProvider wrapper around AppContent (lines 366-368)
+   - Used `usePosts()` hook to access posts context (line 29)
+   - Added new useEffect to call `initializeFeeds()` when authenticated (lines 73-78)
+   - Updated splash screen transition to wait for feeds to load (lines 81-100)
+   - Checks `postsLoading` state before transitioning to FeedList
+   - Minimum 3-second splash screen or until feeds load (whichever is longer)
+
+3. **Added imports to PostsContext**
+   - `feedService` for backend API calls
+   - `parseRSSFeed` for RSS parsing
+   - `contentPipelineService` for pipeline processing
+
+### Decisions Made
+
+- **Parallel feed fetching with timeouts**: Used `Promise.race()` with 15-second timeout per feed
+  - Prevents slow/hanging feeds from blocking app startup
+  - Each feed fetched independently
+  - Failed feeds logged but don't block other feeds
+
+- **Promise.allSettled() for graceful failures**: Used `Promise.allSettled()` instead of `Promise.all()`
+  - Allows some feeds to fail while others succeed
+  - Collects successful results
+  - Logs failures with feed ID and title for debugging
+  - Shows "N successful out of M total feeds" in console
+
+- **Non-blocking pipeline**: Pipeline starts after posts are added to state
+  - `processPosts()` is called but not awaited
+  - Posts available immediately with status='raw'
+  - Pipeline runs in background while user sees FeedList
+  - State updates trigger re-renders as posts are cleaned
+
+- **Splash screen timing**: Wait for both auth AND feeds before showing FeedList
+  - Original: 3-second timeout after auth completes
+  - New: 3-second minimum OR until feeds load (whichever is longer)
+  - Prevents flash of empty FeedList while feeds are loading
+  - Test mode still transitions immediately
+
+- **Keep local posts state**: Kept `posts` local state in App.tsx for now
+  - TrackList still uses local state (from handleFeedSelect)
+  - Will transition to context in Iteration 7
+  - Maintains backward compatibility during migration
+  - Added comment explaining transition plan (line 35)
+
+### Issues Found
+
+- None - TypeScript compilation succeeds with no errors
+
+### Testing Approach
+
+Manual testing will verify:
+1. Feeds fetched at app startup (not when FeedList mounts)
+2. Splash screen stays visible until feeds are loaded
+3. Console logs show feed fetching progress
+4. Pipeline starts automatically after parsing
+5. Posts added to context with status='raw'
+6. FeedList displays after feeds are loaded (Iteration 6 will update FeedList to read from context)
+
+### Console Log Output Expected
+
+```
+[PostsContext] Starting feed initialization
+[PostsContext] Fetched 3 feeds from backend
+[PostsContext] Parsed 47 posts from TechCrunch
+[PostsContext] Parsed 30 posts from Hacker News
+[PostsContext] Feed abc123 (Slow Feed) failed: Error: Feed fetch timeout
+[PostsContext] Collected 77 posts from 2/3 feeds
+[PostsContext] Starting content pipeline
+[Pipeline] Starting batch processing for 77 posts (batch size: 10)
+[Pipeline] Queued 77 posts for processing
+[Cleaning] Started for https://example.com/post1
+[Cleaning] Completed for https://example.com/post1 in 5ms
+[Pipeline] Post https://example.com/post1 status: cleaned
+...
+```
+
+### Next Steps
+
+Iteration 6 will update FeedList component:
+- Remove RSS fetching logic from FeedList
+- Read posts from PostsContext using `usePosts()` hook
+- Calculate feed stats from context posts
+- Filter posts by status='cleaned'
+- Display accurate unread counts and durations

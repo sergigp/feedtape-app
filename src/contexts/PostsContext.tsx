@@ -1,5 +1,8 @@
 import React, { createContext, useState, useContext, ReactNode } from 'react';
 import { Post } from '../types';
+import feedService from '../services/feedService';
+import { parseRSSFeed } from '../services/rssParser';
+import contentPipelineService from '../services/contentPipelineService';
 
 interface PostsContextType {
   posts: Post[];
@@ -28,10 +31,64 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Will be implemented in Iteration 5
   const initializeFeeds = async () => {
-    console.log('[PostsContext] initializeFeeds() not yet implemented - will be added in Iteration 5');
-    setIsLoading(false);
+    console.log('[PostsContext] Starting feed initialization');
+    setIsLoading(true);
+
+    try {
+      // Fetch all feeds from backend
+      const feeds = await feedService.getFeeds();
+      console.log(`[PostsContext] Fetched ${feeds.length} feeds from backend`);
+
+      // Fetch RSS content for all feeds in parallel with 15-second timeout per feed
+      const feedPromises = feeds.map(async (feed) => {
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Feed fetch timeout')), 15000);
+        });
+
+        const fetchPromise = feedService.fetchRSSContent(feed.url).then((xmlContent) => {
+          const parsedPosts = parseRSSFeed(xmlContent);
+          console.log(`[PostsContext] Parsed ${parsedPosts.length} posts from ${feed.title}`);
+
+          // Convert ParsedPost to Post with state machine fields
+          return parsedPosts.map((parsed) => ({
+            ...parsed,
+            feedId: feed.id,
+            rawContent: parsed.content,
+            cleanedContent: null,
+            status: 'raw' as const,
+          }));
+        });
+
+        return Promise.race([fetchPromise, timeoutPromise]);
+      });
+
+      // Use Promise.allSettled to handle failures gracefully
+      const results = await Promise.allSettled(feedPromises);
+
+      // Collect successful results and log failures
+      const allPosts: Post[] = [];
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          allPosts.push(...result.value);
+        } else {
+          console.error(`[PostsContext] Feed ${feeds[index].id} (${feeds[index].title}) failed:`, result.reason);
+        }
+      });
+
+      console.log(`[PostsContext] Collected ${allPosts.length} posts from ${results.filter(r => r.status === 'fulfilled').length}/${feeds.length} feeds`);
+
+      // Add posts to state
+      setPosts(allPosts);
+      setIsLoading(false);
+
+      // Start pipeline processing (non-blocking)
+      console.log('[PostsContext] Starting content pipeline');
+      contentPipelineService.processPosts(allPosts, updatePost);
+    } catch (error) {
+      console.error('[PostsContext] Failed to initialize feeds:', error);
+      setIsLoading(false);
+    }
   };
 
   // Update a single post by link (unique identifier)

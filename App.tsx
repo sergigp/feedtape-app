@@ -9,6 +9,7 @@ import {
   NativeModules,
 } from 'react-native';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { PostsProvider, usePosts } from './src/contexts/PostsContext';
 import { LoginScreen } from './src/components/LoginScreen';
 import { SplashScreen } from './src/components/SplashScreen';
 import { FeedList } from './src/components/FeedList';
@@ -25,12 +26,13 @@ type Screen = 'splash' | 'feedList' | 'trackList' | 'settings';
 
 function AppContent() {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
+  const { posts: contextPosts, isLoading: postsLoading, initializeFeeds } = usePosts();
 
   // Navigation state
   const [currentScreen, setCurrentScreen] = useState<Screen>('splash');
   const [selectedFeed, setSelectedFeed] = useState<Feed | null>(null);
 
-  // Post state
+  // Post state (keep local state for TrackList screen, but will transition to context later)
   const [posts, setPosts] = useState<Post[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [progressMap, setProgressMap] = useState<{ [key: number]: number }>({});
@@ -67,11 +69,19 @@ function AppContent() {
     };
   }, []);
 
-  // Handle splash screen transition when authenticated
+  // Initialize feeds when authenticated
   useEffect(() => {
     if (isAuthenticated && !authLoading) {
+      console.log('[App] User authenticated, initializing feeds');
+      initializeFeeds();
+    }
+  }, [isAuthenticated, authLoading]);
+
+  // Handle splash screen transition when feeds are loaded
+  useEffect(() => {
+    if (isAuthenticated && !authLoading && !postsLoading) {
       const transitionToFeed = () => {
-        console.log('[App] Splash timeout - showing feed list');
+        console.log('[App] Feeds loaded - showing feed list');
         setCurrentScreen((prevScreen) => {
           // Only transition from splash to feedList, don't interfere with other screens
           return prevScreen === 'splash' ? 'feedList' : prevScreen;
@@ -82,12 +92,12 @@ function AppContent() {
       if (process.env.NODE_ENV === 'test') {
         transitionToFeed();
       } else {
-        // In production, show splash for 3 seconds
+        // In production, show splash for minimum 3 seconds or until feeds load
         const splashTimer = setTimeout(transitionToFeed, 3000);
         return () => clearTimeout(splashTimer);
       }
     }
-  }, [isAuthenticated, authLoading]);
+  }, [isAuthenticated, authLoading, postsLoading]);
 
   // Navigation handlers
   const handleFeedSelect = async (feed: Feed) => {
@@ -353,7 +363,9 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <PostsProvider>
+        <AppContent />
+      </PostsProvider>
     </AuthProvider>
   );
 }
