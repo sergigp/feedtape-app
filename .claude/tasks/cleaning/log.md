@@ -385,3 +385,104 @@ Time:        1.448 s
 ### Next Steps
 
 Iteration 4 will implement PostsContext for global state management, which will consume the pipeline service via the onUpdate callback.
+
+---
+
+## Iteration 4: PostsContext - Global State Management
+
+**Date**: 2026-01-06
+
+### What Was Implemented
+
+1. **Created PostsContext.tsx** (src/contexts/PostsContext.tsx)
+   - Followed AuthContext pattern from existing codebase
+   - React Context pattern with Provider and custom hook
+   - Type-safe context with PostsContextType interface
+   - 76 lines of clean, well-structured code
+
+2. **Implemented PostsContextType interface**
+   - `posts: Post[]` - All posts from all feeds
+   - `isLoading: boolean` - True during initial feed fetching
+   - `initializeFeeds: () => Promise<void>` - Placeholder for Iteration 5
+   - `updatePost: (post: Post) => void` - Update single post by link
+   - `getPostsByFeed: (feedId: string) => Post[]` - Filter posts by feed
+   - `clearPosts: () => void` - Clear all posts (on logout)
+
+3. **Implemented PostsProvider component**
+   - State management with `useState<Post[]>([])`
+   - Loading state with `useState<boolean>(true)`
+   - Immutable state updates using functional setState
+   - Console logging for debugging and visibility
+
+4. **Implemented updatePost() method**
+   - O(1) lookup using link as unique identifier
+   - Immutable array update pattern: `[...prevPosts]`
+   - Warning logged if post not found (defensive coding)
+   - Triggers re-render for subscribed components
+
+5. **Implemented getPostsByFeed() method**
+   - Simple filter operation: `posts.filter(post => post.feedId === feedId)`
+   - Returns new array (immutable)
+   - Used by FeedList and TrackList components (future iterations)
+
+6. **Implemented clearPosts() method**
+   - Resets posts array to empty
+   - Sets isLoading to false
+   - Called on user logout to free memory
+
+7. **Created usePosts() custom hook**
+   - Follows React Context best practices
+   - Throws descriptive error if used outside provider
+   - Type-safe access to context
+
+8. **Deferred initializeFeeds() implementation**
+   - Placeholder function logs message
+   - Will be implemented in Iteration 5 with feed fetching logic
+   - Maintains type safety and interface contract
+
+### Decisions Made
+
+- **Context pattern over Redux**: Matched existing AuthContext pattern
+  - Simpler for this use case (no complex reducers needed)
+  - Less boilerplate code
+  - Familiar pattern for developers working on this codebase
+
+- **Link as unique identifier**: Used `post.link` for O(1) lookup in updatePost()
+  - Already established as unique identifier in Iteration 1
+  - Consistent with readStatusService (also uses link)
+  - No additional indexing needed
+
+- **Immutable state updates**: Used functional setState pattern
+  - `setPosts(prevPosts => ...)` ensures atomic updates
+  - Prevents race conditions with concurrent updates
+  - React best practice for derived state
+
+- **Deferred initialization**: Placeholder for initializeFeeds()
+  - Keeps Iteration 4 focused on context infrastructure
+  - Iteration 5 will add feed fetching, RSS parsing, and pipeline integration
+  - Maintains clean separation of concerns
+
+- **No persistent storage**: Memory-only state for now
+  - Matches spec requirement: "Persistent storage deferred to future iteration"
+  - Posts cleared on logout
+  - Re-fetched on app startup
+
+### Issues Found
+
+- None - TypeScript compilation succeeds with no errors
+
+### Testing Approach
+
+Manual testing will occur during App.tsx integration (Iteration 5):
+- PostsProvider will wrap App component
+- initializeFeeds() will be called on authenticated user
+- updatePost() will be called by pipeline service callbacks
+- Component re-renders will be verified when posts state changes
+
+### Next Steps
+
+Iteration 5 will implement App Startup Integration:
+- Implement initializeFeeds() with feed fetching and RSS parsing
+- Integrate contentPipelineService with updatePost() callback
+- Add PostsProvider to App.tsx component tree
+- Ensure splash screen stays visible until feeds are loaded
