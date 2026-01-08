@@ -20,9 +20,9 @@ import { TechnicolorButton } from "./TechnicolorButton";
 import { colors } from "../constants/colors";
 import { Feed, FeedStats } from "../types";
 import feedService from "../services/feedService";
-import { parseRSSFeed } from "../services/rssParser";
 import nativeTtsService from "../services/nativeTtsService";
 import readStatusService from "../services/readStatusService";
+import { usePosts } from "../contexts/PostsContext";
 
 const { width } = Dimensions.get("window");
 
@@ -38,63 +38,52 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Access global posts from PostsContext
+  const { posts, getPostsByFeed, initializeFeeds } = usePosts();
+
   useEffect(() => {
     loadFeeds();
   }, []);
 
-  const loadFeedStats = async (feedsToLoad: Feed[]) => {
-    // Initialize all feeds as loading
-    const initialStats: Record<string, FeedStats> = {};
-    feedsToLoad.forEach((feed) => {
-      initialStats[feed.id] = { unreadCount: 0, totalDuration: 0, isLoading: true };
-    });
-    setFeedStats(initialStats);
+  // Recalculate feed stats whenever posts change (as pipeline progresses)
+  useEffect(() => {
+    if (feeds.length > 0) {
+      calculateFeedStats(feeds);
+    }
+  }, [posts, feeds]);
 
-    // Fetch all feeds in parallel
-    const results = await Promise.allSettled(
-      feedsToLoad.map(async (feed) => {
-        const xmlContent = await feedService.fetchRSSContent(feed.url);
-        // Parse RSS feed (filters articles older than 90 days)
-        const posts = parseRSSFeed(xmlContent);
-
-        // Filter unread posts using read status service
-        const unreadPosts = posts.filter((post) => {
-          return !readStatusService.isRead(post.link);
-        });
-
-        // Calculate total duration for unread posts
-        const totalDuration = unreadPosts.reduce((sum, post) => {
-          return sum + nativeTtsService.estimateDuration(post.plainText);
-        }, 0);
-
-        return {
-          feedId: feed.id,
-          unreadCount: unreadPosts.length,
-          totalDuration,
-        };
-      })
-    );
-
-    // Update stats for each feed
+  const calculateFeedStats = (feedsToCalculate: Feed[]) => {
     const updatedStats: Record<string, FeedStats> = {};
-    results.forEach((result, index) => {
-      const feedId = feedsToLoad[index].id;
-      if (result.status === "fulfilled") {
-        updatedStats[feedId] = {
-          unreadCount: result.value.unreadCount,
-          totalDuration: result.value.totalDuration,
-          isLoading: false,
-        };
-      } else {
-        console.error(`[FeedList] Failed to load stats for feed ${feedId}:`, result.reason);
-        updatedStats[feedId] = {
-          unreadCount: 0,
-          totalDuration: 0,
-          isLoading: false,
-          error: true,
-        };
-      }
+
+    feedsToCalculate.forEach((feed) => {
+      // Get posts for this feed from global context
+      const feedPosts = getPostsByFeed(feed.id);
+
+      // Only count posts that have been cleaned successfully
+      // Filter out posts with status='error' or still processing
+      const cleanedPosts = feedPosts.filter(
+        (post) => post.status === 'cleaned'
+      );
+
+      // Filter unread posts using read status service
+      const unreadPosts = cleanedPosts.filter((post) => {
+        return !readStatusService.isRead(post.link);
+      });
+
+      // Calculate total duration for unread posts
+      // Use cleanedContent for more accurate duration (shorter than raw HTML)
+      const totalDuration = unreadPosts.reduce((sum, post) => {
+        const content = post.cleanedContent || post.plainText;
+        return sum + nativeTtsService.estimateDuration(content);
+      }, 0);
+
+      updatedStats[feed.id] = {
+        unreadCount: unreadPosts.length,
+        totalDuration,
+        isLoading: false,
+      };
     });
+
     setFeedStats(updatedStats);
   };
 
@@ -102,13 +91,18 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
     try {
       if (isRefresh) {
         setIsRefreshing(true);
+        // Trigger re-initialization of feeds from context
+        await initializeFeeds();
       } else {
         setIsLoading(true);
       }
+
+      // Fetch feeds from backend (just metadata, not RSS content)
       const fetchedFeeds = await feedService.getFeeds();
       setFeeds(fetchedFeeds);
-      // Load stats for all feeds in parallel
-      loadFeedStats(fetchedFeeds);
+
+      // Calculate stats from posts already in context
+      calculateFeedStats(fetchedFeeds);
     } catch (error) {
       console.error("[FeedList] Failed to load feeds:", error);
       Alert.alert("Error", "Failed to load feeds. Please try again.");
