@@ -9,15 +9,16 @@ import {
   NativeModules,
 } from 'react-native';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { PostsProvider, usePosts } from './src/contexts/PostsContext';
 import { LoginScreen } from './src/components/LoginScreen';
 import { SplashScreen } from './src/components/SplashScreen';
 import { FeedList } from './src/components/FeedList';
 import { TrackList } from './src/components/TrackList';
 import { SettingsScreen } from './src/components/SettingsScreen';
-import { parseRSSFeed, Post } from './src/services/rssParser';
+import { Post } from './src/services/rssParser';
 import sherpaOnnxService from './src/services/sherpaOnnxService';
-import feedService from './src/services/feedService';
 import readStatusService from './src/services/readStatusService';
+import contentPipelineService from './src/services/contentPipelineService';
 import { colors } from './src/constants/colors';
 import { Feed } from './src/types';
 
@@ -25,13 +26,13 @@ type Screen = 'splash' | 'feedList' | 'trackList' | 'settings';
 
 function AppContent() {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
+  const { isLoading: postsLoading, initializeFeeds, getPostsByFeed } = usePosts();
 
   // Navigation state
   const [currentScreen, setCurrentScreen] = useState<Screen>('splash');
   const [selectedFeed, setSelectedFeed] = useState<Feed | null>(null);
 
-  // Post state
-  const [posts, setPosts] = useState<Post[]>([]);
+  // Track selection state
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [progressMap, setProgressMap] = useState<{ [key: number]: number }>({});
 
@@ -67,11 +68,19 @@ function AppContent() {
     };
   }, []);
 
-  // Handle splash screen transition when authenticated
+  // Initialize feeds when authenticated
   useEffect(() => {
     if (isAuthenticated && !authLoading) {
+      console.log('[App] User authenticated, initializing feeds');
+      initializeFeeds();
+    }
+  }, [isAuthenticated, authLoading]);
+
+  // Handle splash screen transition when feeds are loaded
+  useEffect(() => {
+    if (isAuthenticated && !authLoading && !postsLoading) {
       const transitionToFeed = () => {
-        console.log('[App] Splash timeout - showing feed list');
+        console.log('[App] Feeds loaded - showing feed list');
         setCurrentScreen((prevScreen) => {
           // Only transition from splash to feedList, don't interfere with other screens
           return prevScreen === 'splash' ? 'feedList' : prevScreen;
@@ -82,40 +91,20 @@ function AppContent() {
       if (process.env.NODE_ENV === 'test') {
         transitionToFeed();
       } else {
-        // In production, show splash for 3 seconds
+        // In production, show splash for minimum 3 seconds or until feeds load
         const splashTimer = setTimeout(transitionToFeed, 3000);
         return () => clearTimeout(splashTimer);
       }
     }
-  }, [isAuthenticated, authLoading]);
+  }, [isAuthenticated, authLoading, postsLoading]);
 
   // Navigation handlers
   const handleFeedSelect = async (feed: Feed) => {
+    console.log(`[App] Feed selected: ${feed.title}`);
     setSelectedFeed(feed);
-    setIsLoading(true);
 
-    try {
-      // Fetch RSS content from the feed URL
-      const xmlContent = await feedService.fetchRSSContent(feed.url);
-
-      // Parse the RSS feed (filters articles older than 90 days)
-      const posts = parseRSSFeed(xmlContent);
-      console.log(`[App] Parsed ${posts.length} posts from ${feed.title}`);
-
-      // Update posts state
-      setPosts(posts);
-
-      // Navigate to track list
-      setCurrentScreen('trackList');
-    } catch (error) {
-      console.error('[App] Failed to fetch/parse RSS feed:', error);
-      Alert.alert(
-        'Error Loading Feed',
-        'Failed to load posts from this feed. Please check the feed URL and try again.'
-      );
-    } finally {
-      setIsLoading(false);
-    }
+    // Navigate to track list - posts are already in context from app startup
+    setCurrentScreen('trackList');
   };
 
   const handleBackToFeedList = () => {
@@ -126,11 +115,24 @@ function AppContent() {
       setIsPlaying(false);
     }
     setSelectedIndex(null);
+    // Clear pipeline queue to stop processing posts that aren't being viewed
+    contentPipelineService.clearQueue();
+    console.log('[App] Cleared pipeline queue');
+    // Posts stay in context - no need to clear
     setCurrentScreen('feedList');
+  };
+
+  // Helper function to get cleaned posts for the selected feed
+  const getCleanedPosts = (): Post[] => {
+    if (!selectedFeed) return [];
+    const feedPosts = getPostsByFeed(selectedFeed.id);
+    return feedPosts.filter((post: Post) => post.status === 'cleaned');
   };
 
   // Track selection and playback handlers
   const selectArticle = async (index: number) => {
+    const posts = getCleanedPosts();
+
     // If clicking on the currently selected track, toggle play/pause
     if (selectedIndex === index) {
       await handlePlayPause();
@@ -193,12 +195,28 @@ function AppContent() {
         post.title
       );
 
+      // Use cleanedContent if available, fallback to plainText for backward compatibility
+      const contentToSpeak = post.cleanedContent || post.plainText;
+      const usingCleaned = post.cleanedContent !== null;
+
+      // Log cleaning status and content sample
+      console.log(`[App] Playback using ${usingCleaned ? 'CLEANED' : 'FALLBACK'} content (status: ${post.status})`);
+
+      // Log first 5 sentences to evaluate cleaning quality
+      const sentences = contentToSpeak.split(/[.!?]+\s+/).filter(s => s.trim().length > 0);
+      const firstFiveSentences = sentences.slice(0, 5).join('. ') + '.';
+      console.log('[App] First 5 sentences:');
+      console.log(firstFiveSentences);
+      console.log(`[App] Total: ${contentToSpeak.length} chars, ${sentences.length} sentences`);
+
       // Speak the post with title announcement
-      sherpaOnnxService.speakWithTitle(post.title, post.plainText, {
+      sherpaOnnxService.speakWithTitle(post.title, contentToSpeak, {
         language: getLanguageForPost(post),
         onDone: async () => {
           console.log('[App] Post finished, checking for next unread post');
           setIsPlaying(false);
+
+          const posts = getCleanedPosts();
 
           // Find next unread post
           const nextUnreadIndex = posts.findIndex((p, i) =>
@@ -241,6 +259,7 @@ function AppContent() {
   const handlePlayPause = async () => {
     if (selectedIndex === null) return;
 
+    const posts = getCleanedPosts();
     const post = posts[selectedIndex];
     if (!post) return;
 
@@ -263,13 +282,16 @@ function AppContent() {
   };
 
   const handleSkipForward = () => {
+    const posts = getCleanedPosts();
     if (selectedIndex !== null && selectedIndex < posts.length - 1) {
       selectArticle(selectedIndex + 1);
     }
   };
 
   const getPostDuration = (post: Post): string => {
-    const seconds = sherpaOnnxService.estimateDuration(post.plainText);
+    // Use cleanedContent for more accurate duration estimation
+    const content = post.cleanedContent || post.plainText;
+    const seconds = sherpaOnnxService.estimateDuration(content);
     return sherpaOnnxService.formatDuration(seconds);
   };
 
@@ -308,10 +330,10 @@ function AppContent() {
         );
 
       case 'trackList':
-        return (
+        return selectedFeed ? (
           <TrackList
-            feedTitle={selectedFeed?.title || selectedFeed?.url || ''}
-            posts={posts}
+            feedId={selectedFeed.id}
+            feedTitle={selectedFeed.title || selectedFeed.url || ''}
             selectedIndex={selectedIndex}
             progressMap={progressMap}
             isPlaying={isPlaying}
@@ -323,7 +345,7 @@ function AppContent() {
             onSettingsPress={handleSettingsPress}
             getPostDuration={getPostDuration}
           />
-        );
+        ) : null;
 
       case 'settings':
         return <SettingsScreen onBack={() => setCurrentScreen('feedList')} />;
@@ -344,7 +366,9 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <PostsProvider>
+        <AppContent />
+      </PostsProvider>
     </AuthProvider>
   );
 }

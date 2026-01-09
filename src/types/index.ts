@@ -57,15 +57,32 @@ export interface ApiError {
   message: string;
 }
 
-// Post Type - Individual feed item with enriched metadata
-export interface Post {
+// ParsedPost Type - Raw output from RSS parser (before state machine enrichment)
+export interface ParsedPost {
+  link: string;          // Unique identifier for the post
   title: string;
-  link: string;
   pubDate: string;
   author: string;
   content: string;       // Raw HTML content
   plainText: string;     // Clean text for TTS
   language: string;      // BCP-47 code, always present, guaranteed 'en-US' minimum
+}
+
+// Post Type - Individual feed item with enriched metadata and state machine
+export interface Post {
+  link: string;          // Unique identifier for the post
+  feedId: string;        // Associated feed ID
+  title: string;
+  pubDate: string;
+  author: string;
+  content: string;       // Raw HTML content
+  plainText: string;     // Clean text for TTS
+  language: string;      // BCP-47 code, always present, guaranteed 'en-US' minimum
+
+  // Pipeline state machine fields
+  rawContent: string;              // Original RSS content (copy of content)
+  cleanedContent: string | null;   // null until cleaning completes
+  status: 'raw' | 'cleaning' | 'cleaned' | 'error';
 
   // Future AI enrichments (not implemented yet):
   // summary?: string;
