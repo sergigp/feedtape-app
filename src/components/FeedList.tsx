@@ -59,14 +59,14 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
       // Get posts for this feed from global context
       const feedPosts = getPostsByFeed(feed.id);
 
-      // Only count posts that have been cleaned successfully
-      // Filter out posts with status='error' or still processing
-      const cleanedPosts = feedPosts.filter(
-        (post) => post.status === 'cleaned'
+      // Include posts that are raw or cleaned (exclude only error status)
+      // This ensures feeds show unread counts while posts are being processed
+      const validPosts = feedPosts.filter(
+        (post) => post.status === 'raw' || post.status === 'cleaned'
       );
 
       // Filter unread posts using read status service
-      const unreadPosts = cleanedPosts.filter((post) => {
+      const unreadPosts = validPosts.filter((post) => {
         return !readStatusService.isRead(post.link);
       });
 
@@ -160,10 +160,10 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
           }
         >
           {/* Hero Card */}
-          <View style={styles.cardContainer}>
+          {/* <View style={styles.cardContainer}>
             <View style={styles.card}>
               {/* Logo Image */}
-              <View style={styles.logoImageContainer}>
+              {/* <View style={styles.logoImageContainer}>
                 <Image
                   source={require("../../assets/feedtape-logo.png")}
                   style={styles.logoImage}
@@ -179,7 +179,7 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
                 onPress={handleDailyPlay}
               />
             </View>
-          </View>
+          </View> */}
 
           {/* My Feeds Section */}
           <View style={styles.feedSection}>

@@ -29,7 +29,7 @@ interface PostsProviderProps {
 
 export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
   const [posts, setPosts] = useState<Post[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   // Performance: Use Map for O(1) post lookups by link
   const [postIndexMap, setPostIndexMap] = useState<Map<string, number>>(new Map());
 
