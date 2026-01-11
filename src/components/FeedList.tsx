@@ -39,7 +39,7 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Access global posts from PostsContext
-  const { posts, getPostsByFeed, initializeFeeds } = usePosts();
+  const { posts, getPostsByFeed, initializeFeeds, getFeedState, retryFeed } = usePosts();
 
   useEffect(() => {
     loadFeeds();
@@ -56,14 +56,24 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
     const updatedStats: Record<string, FeedStats> = {};
 
     feedsToCalculate.forEach((feed) => {
+      const feedState = getFeedState(feed.id);
+
+      // Only calculate stats for ready feeds
+      if (feedState?.status !== 'ready') {
+        updatedStats[feed.id] = {
+          unreadCount: 0,
+          totalDuration: 0,
+          isLoading: feedState?.status === 'fetching' || feedState?.status === 'processing',
+          error: feedState?.status === 'error',
+        };
+        return;
+      }
+
       // Get posts for this feed from global context
       const feedPosts = getPostsByFeed(feed.id);
 
-      // Include posts that are raw or cleaned (exclude only error status)
-      // This ensures feeds show unread counts while posts are being processed
-      const validPosts = feedPosts.filter(
-        (post) => post.status === 'raw' || post.status === 'cleaned'
-      );
+      // Only include cleaned posts for ready feeds
+      const validPosts = feedPosts.filter((post) => post.status === 'cleaned');
 
       // Filter unread posts using read status service
       const unreadPosts = validPosts.filter((post) => {
@@ -71,7 +81,6 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
       });
 
       // Calculate total duration for unread posts
-      // Use cleanedContent for more accurate duration (shorter than raw HTML)
       const totalDuration = unreadPosts.reduce((sum, post) => {
         const content = post.cleanedContent || post.plainText;
         return sum + nativeTtsService.estimateDuration(content);
@@ -81,6 +90,7 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
         unreadCount: unreadPosts.length,
         totalDuration,
         isLoading: false,
+        error: false,
       };
     });
 
@@ -118,6 +128,44 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
   const handleFeedPress = (feed: Feed) => {
     setActiveFeed(feed);
     onFeedSelect(feed);
+  };
+
+  const getSubtitle = (feed: Feed): string | undefined => {
+    const feedState = getFeedState(feed.id);
+    const stats = feedStats[feed.id];
+
+    switch (feedState?.status) {
+      case 'idle':
+        return 'Waiting...';
+      case 'fetching':
+        return 'Syncing...';
+      case 'processing':
+        const { cleaned, total } = feedState.progress || { cleaned: 0, total: 0 };
+        return `Syncing... ${cleaned}/${total} cleaned`;
+      case 'ready':
+        if (stats?.unreadCount === 0) {
+          return 'all played';
+        }
+        return undefined;  // Use FeedListItem's default formatting
+      case 'error':
+        return feedState.error || 'Failed to load';
+      default:
+        return undefined;
+    }
+  };
+
+  const isClickable = (feed: Feed): boolean => {
+    const feedState = getFeedState(feed.id);
+    return feedState?.status === 'ready';
+  };
+
+  const handleRetryFeed = async (feedId: string) => {
+    try {
+      await retryFeed(feedId);
+    } catch (error) {
+      console.error('[FeedList] Retry failed:', error);
+      Alert.alert('Error', 'Failed to retry feed. Please try again.');
+    }
   };
 
   const handleAddFeed = () => {
@@ -198,20 +246,26 @@ export const FeedList: React.FC<FeedListProps> = ({ onFeedSelect, onSettingsPres
               </View>
             ) : (
               feeds.map((feed) => {
+                const feedState = getFeedState(feed.id);
                 const stats = feedStats[feed.id];
-                const isGrayedOut = stats && !stats.isLoading && stats.unreadCount === 0;
+                const clickable = isClickable(feed);
+                const subtitle = getSubtitle(feed);
+                const isGrayedOut = feedState?.status === 'ready' && stats?.unreadCount === 0;
+
                 return (
                   <FeedListItem
                     key={feed.id}
                     title={feed.title || feed.url}
+                    subtitle={subtitle}
                     isActive={activeFeed?.id === feed.id}
                     isLoading={stats?.isLoading}
-                    unreadCount={stats?.unreadCount}
-                    duration={stats?.totalDuration}
+                    unreadCount={feedState?.status === 'ready' ? stats?.unreadCount : undefined}
+                    duration={feedState?.status === 'ready' ? stats?.totalDuration : undefined}
                     error={stats?.error}
                     isGrayedOut={isGrayedOut}
-                    onPress={() => handleFeedPress(feed)}
-                    onPlayPress={() => handleFeedPress(feed)}
+                    onPress={clickable ? () => handleFeedPress(feed) : undefined}
+                    onPlayPress={clickable ? () => handleFeedPress(feed) : undefined}
+                    onRetry={feedState?.status === 'error' ? () => handleRetryFeed(feed.id) : undefined}
                   />
                 );
               })

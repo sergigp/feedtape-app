@@ -213,3 +213,83 @@ This log tracks the iterative implementation of the concurrent pipeline feature.
 - Manual testing with real feeds will verify concurrent progress tracking behavior
 
 **Next Iteration**: Update FeedList UI to display feed states and handle clickability (Iteration 6)
+
+---
+
+## Iteration 5: FeedList & FeedListItem - Display Feed States & Handle Clickability
+
+**Started**: 2026-01-11
+**Completed**: 2026-01-11
+
+**Goal**: Update FeedList UI to display feed states, show progress indicators, control clickability based on feed status, and add retry functionality for failed feeds.
+
+**Changes**:
+
+1. **Updated `src/components/FeedList.tsx`**:
+   - Imported `getFeedState` and `retryFeed` from PostsContext
+   - Refactored `calculateFeedStats()` to check feed state before calculating:
+     - For non-ready feeds (idle, fetching, processing, error): Returns minimal stats with appropriate loading/error flags
+     - For ready feeds: Calculates unread count and duration using only cleaned posts
+     - Sets `isLoading` flag for fetching/processing states
+     - Sets `error` flag for error state
+   - Added `getSubtitle()` helper function:
+     - Returns custom subtitle based on feed state:
+       - 'idle': "Waiting..."
+       - 'fetching': "Syncing..."
+       - 'processing': "Syncing... X/Y cleaned" (shows progress)
+       - 'ready': undefined (uses FeedListItem's default formatting) or "all played" if no unread
+       - 'error': Error message or "Failed to load"
+   - Added `isClickable()` helper function:
+     - Returns true only when feed status is 'ready'
+     - Controls whether feed can be selected
+   - Added `handleRetryFeed()` async function:
+     - Calls `retryFeed(feedId)` from PostsContext
+     - Handles errors with user-friendly Alert
+   - Updated feed rendering logic:
+     - Passes `subtitle` prop from `getSubtitle()` helper
+     - Only passes `unreadCount` and `duration` when feed is 'ready'
+     - Sets `onPress` and `onPlayPress` to undefined when feed is not clickable
+     - Passes `onRetry` callback only when feed status is 'error'
+
+2. **Updated `src/components/FeedListItem.tsx`**:
+   - Added `onRetry?: () => void` prop to interface
+   - Updated component to accept `onRetry` parameter
+   - Enhanced button rendering logic with three states:
+     - Loading: Shows ActivityIndicator
+     - Error with retry: Shows refresh icon in brand orange color
+     - Normal: Shows play/reload icon (existing behavior)
+   - Added touch feedback controls to text container:
+     - `disabled={!onPress}`: Disables touch when no handler
+     - `activeOpacity={onPress ? 0.7 : 1}`: No visual feedback when disabled
+   - Error retry button displays when `error && onRetry` are both truthy
+
+**Key Design Decisions**:
+
+1. **Subtitle logic centralized**: The `getSubtitle()` helper in FeedList determines what subtitle to show based on feed state, keeping logic in one place.
+
+2. **Conditional stats**: Only ready feeds show unread count and duration. Non-ready feeds show progress or status messages instead.
+
+3. **Clickability control**: Feeds are only clickable when status='ready', preventing users from tapping feeds that aren't ready yet.
+
+4. **Error color**: Used `colors.brandOrange` for retry icon since no dedicated error color exists in the design system.
+
+5. **Touch feedback**: Non-clickable feeds have `disabled={true}` and `activeOpacity={1}` to provide no visual feedback on touch, signaling they're not interactive.
+
+**Testing**:
+
+- ✅ TypeScript compilation succeeds with no errors (`npx tsc --noEmit`)
+- ✅ All new helper functions properly implemented
+- ✅ Feed state transitions properly wired to UI display
+- ✅ Retry button only shows for error feeds
+- ✅ Non-ready feeds have no onPress handler (undefined)
+- ✅ Progress display format: "Syncing... X/Y cleaned"
+
+**Notes**:
+
+- This iteration combines work from Iteration 6 (FeedList UI) and Iteration 7 (FeedListItem retry button) in the plan, as they are tightly coupled
+- Feeds now show real-time progress as they go through states: idle → fetching → processing (with incremental progress) → ready
+- Users can retry failed feeds by tapping the refresh icon
+- Non-ready feeds are visually present but not interactive, providing immediate feedback
+- Manual testing with real feeds required to verify all state transitions display correctly
+
+**Next Iteration**: Update TrackList to filter only cleaned posts (Iteration 8 in plan)
