@@ -1,8 +1,8 @@
 import React, { createContext, useState, useContext, ReactNode } from 'react';
-import { Post, FeedLoadState } from '../types';
+import { Post, FeedLoadState, Feed } from '../types';
 import feedService from '../services/feedService';
 import { parseRSSPost } from '../services/rssParser';
-import contentPipelineService from '../services/contentPipelineService';
+import contentCleaningService from '../services/contentCleaningService';
 
 interface PostsContextType {
   posts: Post[];
@@ -29,6 +29,11 @@ export const usePosts = () => {
 interface PostsProviderProps {
   children: ReactNode;
 }
+
+// Concurrency control constants
+const FEED_BATCH_SIZE = 5;  // Max 5 feeds processing concurrently
+const POST_BATCH_SIZE = 5;  // Max 5 posts cleaning per feed
+// Total max concurrency: 5 feeds × 5 posts = 25 operations
 
 export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -75,6 +80,96 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     // Implementation will be added in Iteration 5
   };
 
+  // Process all posts for a single feed with limited concurrency
+  const processPostsForFeed = async (
+    feedPosts: Post[],
+    onUpdate: (post: Post) => void
+  ): Promise<void> => {
+    // Process posts in batches
+    for (let i = 0; i < feedPosts.length; i += POST_BATCH_SIZE) {
+      const batch = feedPosts.slice(i, i + POST_BATCH_SIZE);
+
+      await Promise.allSettled(
+        batch.map(async (post) => {
+          try {
+            // Clean the post
+            const cleanedContent = contentCleaningService.cleanContent(post.rawContent);
+
+            // Update post with cleaned content
+            const updatedPost = {
+              ...post,
+              cleanedContent,
+              status: 'cleaned' as const,
+            };
+
+            onUpdate(updatedPost);
+          } catch (error) {
+            console.error(`[PostsContext] Failed to clean post ${post.link}:`, error);
+
+            const errorPost = {
+              ...post,
+              status: 'error' as const,
+            };
+
+            onUpdate(errorPost);
+          }
+        })
+      );
+    }
+  };
+
+  // Process a single feed progressively through all states
+  const processFeedProgressive = async (feed: Feed) => {
+    console.log(`[PostsContext] Processing feed: ${feed.title}`);
+
+    // Step 1: Mark as 'fetching'
+    updateFeedState(feed.id, { status: 'fetching' });
+
+    try {
+      // Step 2: Fetch RSS with timeout
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Feed fetch timeout')), 15000);
+      });
+
+      const xmlContent = await Promise.race([
+        feedService.fetchRSSContent(feed.url),
+        timeoutPromise
+      ]);
+
+      // Step 3: Parse RSS with 15-item limit
+      const parsedPosts = parseRSSPost(xmlContent, { maxItems: 15 });
+      console.log(`[PostsContext] Parsed ${parsedPosts.length} posts from ${feed.title}`);
+
+      // Step 4: Convert to Post objects with state machine fields
+      const feedPosts = parsedPosts.map(parsed => ({
+        ...parsed,
+        feedId: feed.id,
+        rawContent: parsed.content,
+        cleanedContent: null,
+        status: 'raw' as const,
+      }));
+
+      // Step 5: Add to state incrementally
+      addPosts(feedPosts);
+
+      // Step 6: Mark as 'processing' with progress
+      updateFeedState(feed.id, {
+        status: 'processing',
+        progress: { total: feedPosts.length, cleaned: 0 }
+      });
+
+      // Step 7: Start PER-FEED pipeline for this feed's posts
+      await processPostsForFeed(feedPosts, updatePost);
+
+    } catch (error) {
+      console.error(`[PostsContext] Feed ${feed.id} failed:`, error);
+      updateFeedState(feed.id, {
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Failed to load feed'
+      });
+    }
+  };
+
   const initializeFeeds = async () => {
     // Prevent concurrent calls
     if (isLoading) {
@@ -86,60 +181,31 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     setIsLoading(true);
 
     try {
-      // Fetch all feeds from backend
+      // 1. Fetch feed metadata from backend (fast)
       const feeds = await feedService.getFeeds();
       console.log(`[PostsContext] Fetched ${feeds.length} feeds from backend`);
 
-      // Fetch RSS content for all feeds in parallel with 15-second timeout per feed
-      const feedPromises = feeds.map(async (feed) => {
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('Feed fetch timeout')), 15000);
-        });
-
-        const fetchPromise = feedService.fetchRSSContent(feed.url).then((xmlContent) => {
-          const parsedPosts = parseRSSPost(xmlContent);
-          console.log(`[PostsContext] Parsed ${parsedPosts.length} posts from ${feed.title}`);
-
-          // Convert ParsedPost to Post with state machine fields
-          return parsedPosts.map((parsed) => ({
-            ...parsed,
-            feedId: feed.id,
-            rawContent: parsed.content,
-            cleanedContent: null,
-            status: 'raw' as const,
-          }));
-        });
-
-        return Promise.race([fetchPromise, timeoutPromise]);
+      // 2. Initialize all feeds to 'idle' state immediately
+      const initialStates = new Map<string, FeedLoadState>();
+      feeds.forEach(feed => {
+        initialStates.set(feed.id, { feedId: feed.id, status: 'idle' });
       });
+      setFeedStates(initialStates);
+      setIsLoading(false);  // ← Feeds now visible in UI!
 
-      // Use Promise.allSettled to handle failures gracefully
-      const results = await Promise.allSettled(feedPromises);
+      // 3. Process feeds in BATCHES to prevent overload
+      // Process max FEED_BATCH_SIZE feeds concurrently
+      // As feeds complete, next batch starts
+      for (let i = 0; i < feeds.length; i += FEED_BATCH_SIZE) {
+        const batch = feeds.slice(i, i + FEED_BATCH_SIZE);
+        console.log(`[PostsContext] Processing feed batch ${Math.floor(i / FEED_BATCH_SIZE) + 1} (${batch.length} feeds)`);
 
-      // Collect successful results and log failures
-      const allPosts: Post[] = [];
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          allPosts.push(...result.value);
-        } else {
-          console.error(`[PostsContext] Feed ${feeds[index].id} (${feeds[index].title}) failed:`, result.reason);
-        }
-      });
+        await Promise.allSettled(
+          batch.map(feed => processFeedProgressive(feed))
+        );
+      }
 
-      console.log(`[PostsContext] Collected ${allPosts.length} posts from ${results.filter(r => r.status === 'fulfilled').length}/${feeds.length} feeds`);
-
-      // Add posts to state and build index map
-      setPosts(allPosts);
-      const indexMap = new Map<string, number>();
-      allPosts.forEach((post, index) => {
-        indexMap.set(post.link, index);
-      });
-      setPostIndexMap(indexMap);
-      setIsLoading(false);
-
-      // Start pipeline processing (non-blocking)
-      console.log('[PostsContext] Starting content pipeline');
-      contentPipelineService.processPosts(allPosts, updatePost);
+      console.log('[PostsContext] All feeds processed');
     } catch (error) {
       console.error('[PostsContext] Failed to initialize feeds:', error);
       setIsLoading(false);
