@@ -181,8 +181,13 @@ export function parseRSSItem(xmlString: string): ParsedPost | null {
  * from appearing as "unread" after read status cleanup.
  *
  * @param xmlString - The RSS/Atom XML string to parse
+ * @param options - Optional parsing options
+ * @param options.maxItems - Maximum number of items to return (default: unlimited)
  */
-export function parseRSSFeed(xmlString: string): ParsedPost[] {
+export function parseRSSPost(
+  xmlString: string,
+  options?: { maxItems?: number }
+): ParsedPost[] {
   const posts: ParsedPost[] = [];
 
   // CRITICAL: Must match CLEANUP_AGE_DAYS in readStatusService.ts
@@ -235,5 +240,15 @@ export function parseRSSFeed(xmlString: string): ParsedPost[] {
     console.log(`[RSSParser] Parsed ${recentPosts.length} articles (${posts.length - recentPosts.length} filtered as too old)`);
   }
 
-  return recentPosts;
+  // Apply item limit after date filtering
+  const maxItems = options?.maxItems || Infinity;
+  const limitedPosts = recentPosts.slice(0, maxItems);
+
+  if (recentPosts.length > maxItems) {
+    console.log(
+      `[RSSParser] Limited to ${maxItems} posts (${recentPosts.length} available)`
+    );
+  }
+
+  return limitedPosts;
 }

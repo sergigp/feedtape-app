@@ -1,7 +1,7 @@
 import React, { createContext, useState, useContext, ReactNode } from 'react';
 import { Post } from '../types';
 import feedService from '../services/feedService';
-import { parseRSSFeed } from '../services/rssParser';
+import { parseRSSPost } from '../services/rssParser';
 import contentPipelineService from '../services/contentPipelineService';
 
 interface PostsContextType {
@@ -55,7 +55,7 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
         });
 
         const fetchPromise = feedService.fetchRSSContent(feed.url).then((xmlContent) => {
-          const parsedPosts = parseRSSFeed(xmlContent);
+          const parsedPosts = parseRSSPost(xmlContent);
           console.log(`[PostsContext] Parsed ${parsedPosts.length} posts from ${feed.title}`);
 
           // Convert ParsedPost to Post with state machine fields
