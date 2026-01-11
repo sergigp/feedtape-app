@@ -50,13 +50,14 @@ export const TrackList: React.FC<TrackListProps> = ({
   onSettingsPress,
   getPostDuration,
 }) => {
-  const { getPostsByFeed } = usePosts();
+  const { getPostsByFeed, posts: contextPosts } = usePosts();
 
-  // Get posts from context, filtered by feedId and status='cleaned'
+  // Get posts from context, filtered by feedId
+  // Only show cleaned posts since feed is clickable only when all are cleaned
   const posts = React.useMemo(() => {
     const feedPosts = getPostsByFeed(feedId);
     return feedPosts.filter(post => post.status === 'cleaned');
-  }, [feedId, getPostsByFeed]);
+  }, [feedId, getPostsByFeed, contextPosts]);
 
   // Calculate new tracks count based on read status
   const newTracksCount = React.useMemo(() => {
@@ -97,10 +98,10 @@ export const TrackList: React.FC<TrackListProps> = ({
       <View style={styles.divider} />
 
       {/* Hero Card - New Tracks */}
-      <View style={styles.cardContainer}>
+      {/* <View style={styles.cardContainer}>
         <View style={styles.card}>
           {/* Cassette Logo */}
-          <View style={styles.logoImageContainer}>
+          {/* <View style={styles.logoImageContainer}>
             <Image
               source={require('../../assets/feedtape-logo.png')}
               style={styles.logoImage}
@@ -109,12 +110,12 @@ export const TrackList: React.FC<TrackListProps> = ({
           </View>
 
           {/* New Tracks Count */}
-          <Text style={styles.cardTitle}>
+          {/* <Text style={styles.cardTitle}>
             {newTracksCount} new track{newTracksCount !== 1 ? 's' : ''}
           </Text>
 
           {/* Play Button */}
-          <TechnicolorButton
+          {/* <TechnicolorButton
             label="PLAY"
             icon="play"
             onPress={() => {
@@ -126,11 +127,11 @@ export const TrackList: React.FC<TrackListProps> = ({
           />
 
           {/* Subtitle */}
-          <Text style={styles.cardSubtitle}>
+          {/* <Text style={styles.cardSubtitle}>
             Listen in Headline mode
           </Text>
         </View>
-      </View>
+      </View> */}
 
       {/* Tracks Section Header */}
       <View style={styles.sectionHeader}>

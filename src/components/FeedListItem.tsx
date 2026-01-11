@@ -15,6 +15,7 @@ interface FeedListItemProps {
   error?: boolean;
   onPress?: () => void;
   onPlayPress?: () => void;
+  onRetry?: () => void;
 }
 
 export const FeedListItem: React.FC<FeedListItemProps> = ({
@@ -28,6 +29,7 @@ export const FeedListItem: React.FC<FeedListItemProps> = ({
   error = false,
   onPress,
   onPlayPress,
+  onRetry,
 }) => {
   const getSubtitle = () => {
     if (isLoading) return 'Loading...';
@@ -42,7 +44,12 @@ export const FeedListItem: React.FC<FeedListItemProps> = ({
 
   return (
     <View style={styles.feedItem}>
-      <TouchableOpacity onPress={onPress} style={styles.textContainer}>
+      <TouchableOpacity
+        onPress={onPress}
+        style={styles.textContainer}
+        disabled={!onPress}
+        activeOpacity={onPress ? 0.7 : 1}
+      >
         <Text style={[styles.feedTitle, isGrayedOut && styles.grayText]}>
           {title}
         </Text>
@@ -52,6 +59,10 @@ export const FeedListItem: React.FC<FeedListItemProps> = ({
       </TouchableOpacity>
       {isLoading ? (
         <ActivityIndicator size="small" color={colors.foreground} />
+      ) : error && onRetry ? (
+        <TouchableOpacity onPress={onRetry}>
+          <Ionicons name="refresh" size={24} color={colors.brandOrange} />
+        </TouchableOpacity>
       ) : (
         <TouchableOpacity onPress={isGrayedOut ? onPress : onPlayPress}>
           <Ionicons

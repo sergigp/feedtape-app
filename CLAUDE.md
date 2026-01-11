@@ -41,6 +41,8 @@ npm run web
 
 ## Architecture
 
+**📖 For detailed technical documentation on the concurrent feed processing pipeline, see [docs/concurrent-feed-pipeline.md](docs/concurrent-feed-pipeline.md)**
+
 ### Service Layer Architecture
 The app uses a **singleton service pattern** for all major features:
 

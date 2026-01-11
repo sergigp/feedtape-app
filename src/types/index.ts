@@ -53,6 +53,23 @@ export interface FeedStats {
   error?: boolean;
 }
 
+export type FeedStatus =
+  | 'idle'        // Feed metadata loaded, not started
+  | 'fetching'    // Fetching RSS XML from URL
+  | 'processing'  // RSS parsed, posts being cleaned
+  | 'ready'       // All posts cleaned, clickable
+  | 'error';      // Failed to fetch or process
+
+export interface FeedLoadState {
+  feedId: string;
+  status: FeedStatus;
+  progress?: {
+    total: number;      // Total posts for this feed
+    cleaned: number;    // How many posts cleaned
+  };
+  error?: string;       // Error message if status is 'error'
+}
+
 export interface ApiError {
   message: string;
 }
