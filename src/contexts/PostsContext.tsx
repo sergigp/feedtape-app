@@ -132,12 +132,16 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
         if (!post) break;
 
         try {
-          // Clean the post
+          // Clean the post content
           const cleanedContent = contentCleaningService.cleanContent(post.rawContent);
 
-          // Update post with cleaned content
+          // Clean the post title (decode HTML entities)
+          const cleanedTitle = contentCleaningService.cleanTitle(post.title);
+
+          // Update post with cleaned content and title
           const updatedPost = {
             ...post,
+            title: cleanedTitle,
             cleanedContent,
             status: 'cleaned' as const,
           };
