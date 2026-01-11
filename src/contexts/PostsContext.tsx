@@ -55,17 +55,20 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
 
   // Add posts incrementally (per feed)
   const addPosts = (newPosts: Post[]) => {
+    // Update posts and index map together to avoid race conditions
     setPosts(prev => {
-      const startIndex = prev.length;
-      // Update index map for new posts
-      setPostIndexMap(prevMap => {
-        const newMap = new Map(prevMap);
-        newPosts.forEach((post, i) => {
-          newMap.set(post.link, startIndex + i);
+      const newPostsArray = [...prev, ...newPosts];
+
+      // Rebuild entire index map from scratch to ensure consistency
+      setPostIndexMap(() => {
+        const newMap = new Map<string, number>();
+        newPostsArray.forEach((post, index) => {
+          newMap.set(post.link, index);
         });
         return newMap;
       });
-      return [...prev, ...newPosts];
+
+      return newPostsArray;
     });
   };
 
@@ -185,13 +188,20 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
       // Step 5: Add to state incrementally
       addPosts(feedPosts);
 
-      // Step 6: Mark as 'processing' with progress
+      // Step 6: Handle empty feeds (all posts filtered out by date)
+      if (feedPosts.length === 0) {
+        console.log(`[PostsContext] Feed ${feed.title} has no recent posts, marking as ready`);
+        updateFeedState(feed.id, { status: 'ready' });
+        return;
+      }
+
+      // Step 7: Mark as 'processing' with progress
       updateFeedState(feed.id, {
         status: 'processing',
         progress: { total: feedPosts.length, cleaned: 0 }
       });
 
-      // Step 7: Start PER-FEED pipeline for this feed's posts
+      // Step 8: Start PER-FEED pipeline for this feed's posts
       await processPostsForFeed(feedPosts, updatePost);
 
     } catch (error) {
@@ -247,41 +257,61 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
 
   // Update a single post by link (unique identifier)
   const updatePost = (updatedPost: Post) => {
-    // Performance: Use Map for O(1) lookup instead of O(n) findIndex
-    const index = postIndexMap.get(updatedPost.link);
-    if (index === undefined) {
-      // Post not found - this shouldn't happen, but log it
-      console.warn('[PostsContext] updatePost called for unknown post:', updatedPost.link);
-      return;
-    }
-
     setPosts(prevPosts => {
+      // Find post index - use map for O(1) lookup, fallback to O(n) search if map not ready
+      let index = postIndexMap.get(updatedPost.link);
+
+      if (index === undefined) {
+        // Map not updated yet due to async state updates - search the array
+        index = prevPosts.findIndex(p => p.link === updatedPost.link);
+
+        if (index === -1) {
+          // Post truly not found - log warning but continue processing
+          console.warn('[PostsContext] updatePost called for unknown post:', updatedPost.link);
+          return prevPosts;  // No change
+        }
+      }
+
       // Create new array with updated post (immutable update)
       const newPosts = [...prevPosts];
       newPosts[index] = updatedPost;
       return newPosts;
     });
 
-    // Track feed completion progress
+    // Track feed completion progress using functional updates to avoid race conditions
     if (updatedPost.status === 'cleaned' || updatedPost.status === 'error') {
-      const feedState = feedStates.get(updatedPost.feedId);
-      if (feedState?.status === 'processing' && feedState.progress) {
-        const progress = feedState.progress;
-        const newCleaned = progress.cleaned + 1;
+      setFeedStates(prevStates => {
+        const feedState = prevStates.get(updatedPost.feedId);
 
-        if (newCleaned >= progress.total) {
-          // All posts processed, mark feed as ready
-          console.log(`[PostsContext] Feed ${updatedPost.feedId} is ready (${newCleaned}/${progress.total} posts cleaned)`);
-          updateFeedState(updatedPost.feedId, { status: 'ready' });
-        } else {
-          // Update progress
-          console.log(`[PostsContext] Feed ${updatedPost.feedId} progress: ${newCleaned}/${progress.total} posts cleaned`);
-          updateFeedState(updatedPost.feedId, {
-            status: 'processing',
-            progress: { total: progress.total, cleaned: newCleaned }
-          });
+        // Only update if feed is in processing state with progress tracking
+        if (feedState?.status === 'processing' && feedState.progress) {
+          const progress = feedState.progress;
+          const newCleaned = progress.cleaned + 1;
+          const newStates = new Map(prevStates);
+
+          if (newCleaned >= progress.total) {
+            // All posts processed, mark feed as ready
+            console.log(`[PostsContext] Feed ${updatedPost.feedId} is ready (${newCleaned}/${progress.total} posts cleaned)`);
+            newStates.set(updatedPost.feedId, {
+              feedId: updatedPost.feedId,
+              status: 'ready'
+            });
+          } else {
+            // Update progress
+            console.log(`[PostsContext] Feed ${updatedPost.feedId} progress: ${newCleaned}/${progress.total} posts cleaned`);
+            newStates.set(updatedPost.feedId, {
+              feedId: updatedPost.feedId,
+              status: 'processing',
+              progress: { total: progress.total, cleaned: newCleaned }
+            });
+          }
+
+          return newStates;
         }
-      }
+
+        // No update needed, return previous state
+        return prevStates;
+      });
     }
   };
 

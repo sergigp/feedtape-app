@@ -53,11 +53,10 @@ export const TrackList: React.FC<TrackListProps> = ({
   const { getPostsByFeed, posts: contextPosts } = usePosts();
 
   // Get posts from context, filtered by feedId
-  // Include raw and cleaned posts (exclude only error status)
-  // Playback will use cleanedContent if available, fallback to plainText
+  // Only show cleaned posts since feed is clickable only when all are cleaned
   const posts = React.useMemo(() => {
     const feedPosts = getPostsByFeed(feedId);
-    return feedPosts.filter(post => post.status === 'raw' || post.status === 'cleaned');
+    return feedPosts.filter(post => post.status === 'cleaned');
   }, [feedId, getPostsByFeed, contextPosts]);
 
   // Calculate new tracks count based on read status
