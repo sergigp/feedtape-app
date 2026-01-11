@@ -30,10 +30,10 @@ interface PostsProviderProps {
   children: ReactNode;
 }
 
-// Concurrency control constants
-const FEED_BATCH_SIZE = 5;  // Max 5 feeds processing concurrently
-const POST_BATCH_SIZE = 5;  // Max 5 posts cleaning per feed
-// Total max concurrency: 5 feeds × 5 posts = 25 operations
+// Concurrency control constants - Worker pool pattern at both levels
+const FEED_BATCH_SIZE = 5;  // Feed worker pool: 5 workers pulling feeds from queue
+const POST_BATCH_SIZE = 5;  // Post worker pool: 5 workers per feed pulling posts from queue
+// Total max concurrency: 5 feed workers × 5 post workers = 25 operations
 
 export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -116,42 +116,48 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     }
   };
 
-  // Process all posts for a single feed with limited concurrency
+  // Process all posts for a single feed with worker pool pattern
+  // Uses a queue with concurrent workers for better throughput
   const processPostsForFeed = async (
     feedPosts: Post[],
     onUpdate: (post: Post) => void
   ): Promise<void> => {
-    // Process posts in batches
-    for (let i = 0; i < feedPosts.length; i += POST_BATCH_SIZE) {
-      const batch = feedPosts.slice(i, i + POST_BATCH_SIZE);
+    const queue = [...feedPosts];
 
-      await Promise.allSettled(
-        batch.map(async (post) => {
-          try {
-            // Clean the post
-            const cleanedContent = contentCleaningService.cleanContent(post.rawContent);
+    // Create worker pool: each worker continuously processes from queue
+    // As soon as a worker finishes, it grabs the next post (no waiting for slow posts)
+    const workers = Array.from({ length: POST_BATCH_SIZE }, async () => {
+      while (queue.length > 0) {
+        const post = queue.shift();
+        if (!post) break;
 
-            // Update post with cleaned content
-            const updatedPost = {
-              ...post,
-              cleanedContent,
-              status: 'cleaned' as const,
-            };
+        try {
+          // Clean the post
+          const cleanedContent = contentCleaningService.cleanContent(post.rawContent);
 
-            onUpdate(updatedPost);
-          } catch (error) {
-            console.error(`[PostsContext] Failed to clean post ${post.link}:`, error);
+          // Update post with cleaned content
+          const updatedPost = {
+            ...post,
+            cleanedContent,
+            status: 'cleaned' as const,
+          };
 
-            const errorPost = {
-              ...post,
-              status: 'error' as const,
-            };
+          onUpdate(updatedPost);
+        } catch (error) {
+          console.error(`[PostsContext] Failed to clean post ${post.link}:`, error);
 
-            onUpdate(errorPost);
-          }
-        })
-      );
-    }
+          const errorPost = {
+            ...post,
+            status: 'error' as const,
+          };
+
+          onUpdate(errorPost);
+        }
+      }
+    });
+
+    // Wait for all workers to complete
+    await Promise.all(workers);
   };
 
   // Process a single feed progressively through all states
@@ -236,18 +242,26 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
       setFeedStates(initialStates);
       setIsLoading(false);  // ← Feeds now visible in UI!
 
-      // 3. Process feeds in BATCHES to prevent overload
-      // Process max FEED_BATCH_SIZE feeds concurrently
-      // As feeds complete, next batch starts
-      for (let i = 0; i < feeds.length; i += FEED_BATCH_SIZE) {
-        const batch = feeds.slice(i, i + FEED_BATCH_SIZE);
-        console.log(`[PostsContext] Processing feed batch ${Math.floor(i / FEED_BATCH_SIZE) + 1} (${batch.length} feeds)`);
+      // 3. Process feeds with worker pool pattern
+      // Create queue and spawn FEED_BATCH_SIZE workers
+      // Each worker continuously processes feeds from queue
+      const feedQueue = [...feeds];
 
-        await Promise.allSettled(
-          batch.map(feed => processFeedProgressive(feed))
-        );
-      }
+      const feedWorkers = Array.from({ length: FEED_BATCH_SIZE }, async (_, workerIndex) => {
+        console.log(`[PostsContext] Feed worker ${workerIndex + 1} started`);
 
+        while (feedQueue.length > 0) {
+          const feed = feedQueue.shift();
+          if (!feed) break;
+
+          console.log(`[PostsContext] Worker ${workerIndex + 1} processing: ${feed.title}`);
+          await processFeedProgressive(feed);
+        }
+
+        console.log(`[PostsContext] Feed worker ${workerIndex + 1} finished`);
+      });
+
+      await Promise.all(feedWorkers);
       console.log('[PostsContext] All feeds processed');
     } catch (error) {
       console.error('[PostsContext] Failed to initialize feeds:', error);
