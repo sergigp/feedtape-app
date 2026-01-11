@@ -74,10 +74,43 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
     return feedStates.get(feedId);
   };
 
-  // Retry a failed feed (stub for now, implemented in Iteration 5)
+  // Retry a failed feed
   const retryFeed = async (feedId: string) => {
-    console.log(`[PostsContext] retryFeed called for ${feedId} (not implemented yet)`);
-    // Implementation will be added in Iteration 5
+    console.log(`[PostsContext] Retrying feed ${feedId}`);
+
+    // Remove old posts for this feed
+    setPosts(prev => {
+      const filtered = prev.filter(p => p.feedId !== feedId);
+
+      // Rebuild index map without this feed's posts
+      setPostIndexMap(prevMap => {
+        const newMap = new Map<string, number>();
+        filtered.forEach((post, i) => {
+          newMap.set(post.link, i);
+        });
+        return newMap;
+      });
+
+      return filtered;
+    });
+
+    // Find feed metadata and retry processing
+    try {
+      const feeds = await feedService.getFeeds();
+      const feed = feeds.find(f => f.id === feedId);
+
+      if (!feed) {
+        throw new Error('Feed not found');
+      }
+
+      await processFeedProgressive(feed);
+    } catch (error) {
+      console.error(`[PostsContext] Retry failed for feed ${feedId}:`, error);
+      updateFeedState(feedId, {
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Failed to retry feed'
+      });
+    }
   };
 
   // Process all posts for a single feed with limited concurrency
@@ -228,6 +261,28 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
       newPosts[index] = updatedPost;
       return newPosts;
     });
+
+    // Track feed completion progress
+    if (updatedPost.status === 'cleaned' || updatedPost.status === 'error') {
+      const feedState = feedStates.get(updatedPost.feedId);
+      if (feedState?.status === 'processing' && feedState.progress) {
+        const progress = feedState.progress;
+        const newCleaned = progress.cleaned + 1;
+
+        if (newCleaned >= progress.total) {
+          // All posts processed, mark feed as ready
+          console.log(`[PostsContext] Feed ${updatedPost.feedId} is ready (${newCleaned}/${progress.total} posts cleaned)`);
+          updateFeedState(updatedPost.feedId, { status: 'ready' });
+        } else {
+          // Update progress
+          console.log(`[PostsContext] Feed ${updatedPost.feedId} progress: ${newCleaned}/${progress.total} posts cleaned`);
+          updateFeedState(updatedPost.feedId, {
+            status: 'processing',
+            progress: { total: progress.total, cleaned: newCleaned }
+          });
+        }
+      }
+    }
   };
 
   // Get all posts for a specific feed
