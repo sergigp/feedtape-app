@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, ReactNode } from 'react';
-import { Post } from '../types';
+import { Post, FeedLoadState } from '../types';
 import feedService from '../services/feedService';
 import { parseRSSPost } from '../services/rssParser';
 import contentPipelineService from '../services/contentPipelineService';
@@ -7,7 +7,10 @@ import contentPipelineService from '../services/contentPipelineService';
 interface PostsContextType {
   posts: Post[];
   isLoading: boolean;
+  feedStates: Map<string, FeedLoadState>;
   initializeFeeds: () => Promise<void>;
+  retryFeed: (feedId: string) => Promise<void>;
+  getFeedState: (feedId: string) => FeedLoadState | undefined;
   updatePost: (post: Post) => void;
   getPostsByFeed: (feedId: string) => Post[];
   clearPosts: () => void;
@@ -32,6 +35,45 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(false);
   // Performance: Use Map for O(1) post lookups by link
   const [postIndexMap, setPostIndexMap] = useState<Map<string, number>>(new Map());
+  // Track loading state for each feed
+  const [feedStates, setFeedStates] = useState<Map<string, FeedLoadState>>(new Map());
+
+  // Update a single feed's state
+  const updateFeedState = (feedId: string, update: Partial<FeedLoadState>) => {
+    setFeedStates(prev => {
+      const newStates = new Map(prev);
+      const current = newStates.get(feedId) || { feedId, status: 'idle' as const };
+      newStates.set(feedId, { ...current, ...update });
+      return newStates;
+    });
+  };
+
+  // Add posts incrementally (per feed)
+  const addPosts = (newPosts: Post[]) => {
+    setPosts(prev => {
+      const startIndex = prev.length;
+      // Update index map for new posts
+      setPostIndexMap(prevMap => {
+        const newMap = new Map(prevMap);
+        newPosts.forEach((post, i) => {
+          newMap.set(post.link, startIndex + i);
+        });
+        return newMap;
+      });
+      return [...prev, ...newPosts];
+    });
+  };
+
+  // Get feed state (exposed to consumers)
+  const getFeedState = (feedId: string): FeedLoadState | undefined => {
+    return feedStates.get(feedId);
+  };
+
+  // Retry a failed feed (stub for now, implemented in Iteration 5)
+  const retryFeed = async (feedId: string) => {
+    console.log(`[PostsContext] retryFeed called for ${feedId} (not implemented yet)`);
+    // Implementation will be added in Iteration 5
+  };
 
   const initializeFeeds = async () => {
     // Prevent concurrent calls
@@ -138,7 +180,10 @@ export const PostsProvider: React.FC<PostsProviderProps> = ({ children }) => {
   const value: PostsContextType = {
     posts,
     isLoading,
+    feedStates,
     initializeFeeds,
+    retryFeed,
+    getFeedState,
     updatePost,
     getPostsByFeed,
     clearPosts,
