@@ -89,7 +89,7 @@ class ContentCleaningService {
   }
 
   private postProcessForTTS(text: string): string {
-    return text
+    let processed = text
       // Remove URLs
       .replace(/https?:\/\/[^\s]+/g, '')
 
@@ -132,22 +132,51 @@ class ContentCleaningService {
       .replace(/\[source\]/gi, '')
       .replace(/\[citation needed\]/gi, '')
 
-      // Ellipsis
-      .replace(/\.{3,}/g, '.')
+      // Ellipsis - convert to pause marker (period + newlines)
+      .replace(/\.{3,}/g, '.\n\n')
 
       // HTML entities that might slip through
       .replace(/&nbsp;/g, ' ')
-      .replace(/&mdash;/g, ' ')
-      .replace(/&ndash;/g, ' ')
+      .replace(/&mdash;/g, ', ')  // em-dash as comma pause
+      .replace(/&ndash;/g, ', ')  // en-dash as comma pause
       .replace(/&rsquo;/g, "'")
       .replace(/&lsquo;/g, "'")
       .replace(/&rdquo;/g, '"')
-      .replace(/&ldquo;/g, '"')
+      .replace(/&ldquo;/g, '"');
 
-      // Whitespace normalization
-      .replace(/\n{3,}/g, '\n\n')
-      .replace(/\s{2,}/g, ' ')
+    // TTS pause improvements: add breathing room after sentences
+    processed = this.addTTSPauses(processed);
+
+    // Final whitespace normalization (preserve paragraph breaks)
+    return processed
+      .replace(/\n{4,}/g, '\n\n\n')  // Max 3 newlines (long pause)
+      .replace(/[ \t]{2,}/g, ' ')     // Collapse horizontal whitespace only
       .trim();
+  }
+
+  /**
+   * Add natural pauses for TTS by inserting newlines after sentence boundaries.
+   * This helps TTS engines like Sherpa ONNX produce more natural-sounding speech
+   * with appropriate breathing pauses between sentences and paragraphs.
+   */
+  private addTTSPauses(text: string): string {
+    return text
+      // Mark existing paragraph breaks with placeholder to preserve them
+      .replace(/\n\n+/g, '\n\n\n')  // Existing paragraphs get extra pause
+
+      // Add pause after sentence-ending punctuation followed by space and capital letter
+      // This creates paragraph-like breaks between sentences for longer pauses
+      .replace(/([.!?])\s+([A-Z])/g, '$1\n\n$2')
+
+      // Add pause after colons that introduce lists or explanations
+      .replace(/:\s+([A-Z])/g, ':\n\n$1')
+
+      // Add pause after semicolons (clause separator)
+      .replace(/;\s+/g, ';\n\n')
+
+      // Add slight pause (comma) before coordinating conjunctions in longer phrases
+      // This helps break up run-on sentences for better TTS rhythm
+      .replace(/(\w{20,})\s+(and|but|or|yet|so)\s+/gi, '$1, $2 ');
   }
 }
 
