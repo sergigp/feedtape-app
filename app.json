@@ -17,7 +17,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.feedtapeapp.feedtapeapp",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["audio"]
       }
     },
     "android": {
