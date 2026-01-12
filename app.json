@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.feedtape.app",
+      "bundleIdentifier": "com.feedtapeapp.feedtapeapp",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
