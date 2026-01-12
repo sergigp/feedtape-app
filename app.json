@@ -2,7 +2,7 @@
   "expo": {
     "name": "FeedTape",
     "slug": "feedtape",
-    "version": "1.0.0",
+    "version": "0.1.0",
     "scheme": "feedtape",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,7 +15,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.feedtape.app"
+      "bundleIdentifier": "com.feedtape.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
